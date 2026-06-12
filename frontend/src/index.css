@@ -1,0 +1,218 @@
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Inter:wght@300;400;500;600;700;800&family=Cairo:wght@300;400;500;600;700;800&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --gov-primary: #102a43;
+    --gov-primary-light: #334e68;
+    --gov-accent: #27ab83;
+    --gov-accent-dark: #147d64;
+    --gov-gold: #b8860b;
+    --gov-gold-light: #d4a843;
+    --gov-surface: #ffffff;
+    --gov-surface-secondary: #f8fafc;
+    --gov-surface-tertiary: #f1f5f9;
+    --gov-border: #e2e8f0;
+    --gov-text: #0f172a;
+    --gov-text-secondary: #334155;
+    --gov-text-muted: #64748b;
+    --gov-text-faint: #94a3b8;
+    --gov-ring: rgba(59, 130, 246, 0.4);
+    --gov-ring-accent: rgba(39, 171, 131, 0.25);
+    --ui-accent: #27ab83;
+    --ui-accent-hover: #147d64;
+    --ui-accent-fg: #ffffff;
+    --font-body: '"Plus Jakarta Sans"', 'Inter', system-ui, -apple-system, sans-serif;
+    --font-ar: 'Cairo', system-ui, sans-serif;
+  }
+  .dark {
+    --gov-surface: #0f172a;
+    --gov-surface-secondary: #1e293b;
+    --gov-surface-tertiary: #334155;
+    --gov-border: #334155;
+    --gov-text: #f1f5f9;
+    --gov-text-secondary: #cbd5e1;
+    --gov-text-muted: #94a3b8;
+    --gov-text-faint: #64748b;
+    --gov-grid: #1e293b;
+  }
+  html {
+    @apply antialiased;
+    scroll-behavior: smooth;
+  }
+  body {
+    @apply m-0 font-sans text-neutral-900 bg-surface-secondary;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+  html[lang="ar"] {
+    direction: rtl;
+    font-family: var(--font-ar);
+  }
+  *:focus-visible {
+    @apply outline-2 outline-offset-2 outline-info-500;
+  }
+}
+
+@layer components {
+  /* ── Cards ── */
+  .gov-card {
+    @apply bg-white border border-neutral-200 rounded-xl shadow-card transition-all duration-200;
+  }
+  .gov-card:hover {
+    @apply shadow-elevated;
+  }
+
+  /* ── Inputs ── */
+  .gov-input {
+    @apply w-full h-11 px-3.5 border border-neutral-200 rounded-lg bg-white text-sm text-neutral-900 placeholder:text-neutral-400 transition-all duration-150;
+  }
+  .gov-input:focus {
+    @apply border-info-500 ring-2 ring-info-100 outline-none;
+  }
+  .gov-input-error {
+    @apply border-error-500 ring-2 ring-error-100;
+  }
+
+  /* ── Badges ── */
+  .gov-badge {
+    @apply inline-flex items-center gap-1 px-2.5 py-0.5 text-xs font-semibold rounded-full;
+  }
+
+  /* ── Buttons ── */
+  .gov-btn {
+    @apply inline-flex items-center justify-center gap-2 font-semibold text-sm rounded-lg transition-all duration-150 disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+  .gov-btn-primary {
+    @apply gov-btn bg-primary-900 text-white hover:bg-primary-800 active:bg-primary-950 focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2;
+  }
+  .gov-btn-accent {
+    @apply gov-btn bg-accent-500 text-white hover:bg-accent-600 active:bg-accent-700 focus-visible:ring-2 focus-visible:ring-accent-400 focus-visible:ring-offset-2;
+  }
+  .gov-btn-outline {
+    @apply gov-btn border border-neutral-300 bg-white text-neutral-700 hover:bg-neutral-50 active:bg-neutral-100;
+  }
+  .gov-btn-ghost {
+    @apply gov-btn text-neutral-600 hover:bg-neutral-100 active:bg-neutral-200;
+  }
+  .gov-btn-danger {
+    @apply gov-btn bg-error-600 text-white hover:bg-error-700 active:bg-error-800;
+  }
+
+  /* ── Shimmer loading ── */
+  .gov-shimmer {
+    background: linear-gradient(90deg, #f1f5f9 25%, #e2e8f0 50%, #f1f5f9 75%);
+    background-size: 200% 100%;
+    animation: shimmer 1.5s ease-in-out infinite;
+  }
+
+  /* ── Data table ── */
+  .data-table {
+    @apply w-full border-collapse text-sm;
+  }
+  .data-table thead th {
+    @apply px-4 py-3 text-left text-xs font-bold uppercase tracking-wider text-neutral-500 bg-neutral-50 border-b border-neutral-200;
+  }
+  .data-table tbody td {
+    @apply px-4 py-3 border-b border-neutral-100 text-neutral-700;
+  }
+  .data-table tbody tr {
+    @apply hover:bg-neutral-50 transition-colors;
+  }
+  .data-table tbody tr:last-child td {
+    @apply border-b-0;
+  }
+
+  /* ── Status badge (legacy compat) ── */
+  .role-badge {
+    @apply inline-flex items-center px-2.5 py-0.5 text-xs font-bold rounded-full;
+  }
+  .role-admin {
+    @apply bg-primary-100 text-primary-700;
+  }
+  .role-agent {
+    @apply bg-success-100 text-success-700;
+  }
+  .role-lecteur {
+    @apply bg-neutral-100 text-neutral-600;
+  }
+
+  /* ── Citizen status badge (legacy compat) ── */
+  /* ── Filter Select custom ── */
+  .filter-select {
+    @apply appearance-none h-9 pl-3 pr-8 text-sm border border-slate-200 rounded-lg
+           bg-white text-slate-700 font-medium cursor-pointer
+           focus:outline-none focus:ring-2 focus:border-[#27ab83] transition-all;
+    --tw-ring-color: rgba(39, 171, 131, 0.3);
+  }
+
+  /* ── Notification item ── */
+  .notif-unread {
+    @apply bg-[#27ab83]/5 border-l-2 border-[#27ab83];
+  }
+  .notif-read {
+    @apply opacity-70;
+  }
+
+  /* ── Stat card ── */
+  .stat-card-uniform {
+    background: var(--gov-surface);
+    border: 1px solid var(--gov-border);
+    border-radius: 12px;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
+    padding: 20px;
+    position: relative;
+    overflow: hidden;
+    transition: all 0.2s ease;
+  }
+  .stat-card-uniform:hover {
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+    transform: translateY(-1px);
+  }
+
+  /* ── Tab nav ── */
+  .tab-active {
+    @apply border-b-2 border-[#27ab83] text-[#27ab83] font-semibold;
+  }
+  .tab-inactive {
+    @apply text-slate-500 hover:text-slate-700 font-medium;
+  }
+
+  /* ── Shortcut card ── */
+  .shortcut-card {
+    @apply flex flex-col items-center gap-2 p-4 bg-white border border-slate-200
+           rounded-xl hover:border-[#27ab83] hover:shadow-sm transition-all cursor-pointer;
+  }
+
+  /* ── Citizen status badge (legacy compat) ── */
+  .citizen-status-badge {
+    @apply inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-bold;
+  }
+  .status-en_cours_analyse {
+    @apply bg-info-100 text-info-700;
+  }
+  .status-accepte {
+    @apply bg-success-100 text-success-700;
+  }
+  .status-refuse {
+    @apply bg-error-100 text-error-700;
+  }
+  .status-en_attente {
+    @apply bg-warning-100 text-warning-700;
+  }
+  .status-avis_favorable {
+    @apply bg-primary-100 text-primary-700;
+  }
+  .status-avis_defavorable {
+    @apply bg-error-100 text-error-700;
+  }
+  .status-documents_rejetes {
+    @apply bg-warning-100 text-warning-700;
+  }
+  .status-archive {
+    @apply bg-neutral-100 text-neutral-600;
+  }
+}
