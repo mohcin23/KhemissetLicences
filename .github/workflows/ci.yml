@@ -8,7 +8,7 @@ on:
 
 jobs:
   services-ci:
-    name: Microservices Install and Lint
+    name: Microservices Install
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -23,7 +23,6 @@ jobs:
           - audit-service
           - workflow-service
           - licences-service
-          - api-gateway
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -39,6 +38,22 @@ jobs:
 
       - name: Install service dependencies
         working-directory: ./services/${{ matrix.service }}
+        run: npm install
+
+  api-gateway-ci:
+    name: API Gateway Install
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Install dependencies
+        working-directory: ./api-gateway
         run: npm install
 
   frontend-ci:
