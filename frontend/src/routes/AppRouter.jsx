@@ -23,14 +23,19 @@ export default function AppRouter() {
   if (!authChecked) return <LoadingSpinner />;
   if (!authUser) return <AuthGateway lang={lang} setLang={setLang} setAuthUser={setAuthUser} />;
   if (authUser.role === 'citizen') return (
-    <CitizenPortal
-      lang={lang}
-      setLang={setLang}
-      authUser={authUser}
-      handleLogout={handleLogout}
-      showToast={showToast}
-      toast={toast}
-    />
+    <Routes>
+      <Route path="/citizen/*" element={
+        <CitizenPortal
+          lang={lang}
+          setLang={setLang}
+          authUser={authUser}
+          handleLogout={handleLogout}
+          showToast={showToast}
+          toast={toast}
+        />
+      } />
+      <Route path="*" element={<Navigate to="/citizen/dashboard" replace />} />
+    </Routes>
   );
 
   return (

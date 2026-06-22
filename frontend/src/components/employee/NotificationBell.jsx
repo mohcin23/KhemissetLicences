@@ -4,6 +4,7 @@ import { notificationsAPI } from '../../services/api';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import { formatRelativeTime } from '../../utils/formatters';
+import { translateNotification } from '../../utils/notificationTranslator';
 
 export default function NotificationBell({ lang, isRtl, onNavigateToDemande }) {
   const { showToast } = useToast();
@@ -223,6 +224,7 @@ export default function NotificationBell({ lang, isRtl, onNavigateToDemande }) {
               <div>
                 {notifications.map((notif, idx) => {
                   const isUnread = !notif.is_read;
+                  const { titre, message } = translateNotification(notif, lang);
                   return (
                     <button
                       key={notif.id}
@@ -250,7 +252,7 @@ export default function NotificationBell({ lang, isRtl, onNavigateToDemande }) {
                           className="text-sm font-semibold truncate"
                           style={{ color: isUnread ? 'var(--adm-text-primary)' : 'var(--adm-text-secondary)' }}
                         >
-                          {notif.titre}
+                          {titre}
                         </p>
                         <p
                           className="text-xs mt-0.5 leading-relaxed"
@@ -262,7 +264,7 @@ export default function NotificationBell({ lang, isRtl, onNavigateToDemande }) {
                             overflow: 'hidden',
                           }}
                         >
-                          {notif.message}
+                          {message}
                         </p>
                         <p
                           className="text-[10px] mt-1.5 font-medium"

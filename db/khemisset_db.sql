@@ -4,11 +4,11 @@
 -- Contient : schéma initial + migrations v2, v3, v4
 -- ============================================================
 
-CREATE DATABASE IF NOT EXISTS khemisset_db
+CREATE DATABASE IF NOT EXISTS kh_data
   CHARACTER SET utf8mb4
   COLLATE utf8mb4_unicode_ci;
 
-USE khemisset_db;
+USE kh_data;
 
 -- ============================================================
 -- SUPPRESSION DES TABLES (ordre inverse des dépendances)
@@ -27,30 +27,32 @@ DROP TABLE IF EXISTS users;
 -- TABLE USERS
 -- ============================================================
 CREATE TABLE IF NOT EXISTS users (
-  id            INT AUTO_INCREMENT PRIMARY KEY,
-  username      VARCHAR(50) UNIQUE NOT NULL,
-  password_hash VARCHAR(255) NOT NULL,
-  full_name     VARCHAR(255),
-  phone         VARCHAR(50) NULL,
-  email         VARCHAR(255) NULL,
-  role          ENUM('admin','agent','lecteur','citizen') DEFAULT 'agent',
-  is_active     TINYINT DEFAULT 0,
-  approved_by   INT NULL,
-  approved_at   DATETIME NULL,
-  deleted_at    DATETIME NULL,
-  created_at    DATETIME DEFAULT CURRENT_TIMESTAMP,
+  id                   INT AUTO_INCREMENT PRIMARY KEY,
+  username             VARCHAR(50) UNIQUE NOT NULL,
+  password_hash        VARCHAR(255) NOT NULL,
+  full_name            VARCHAR(255),
+  phone                VARCHAR(50) NULL,
+  email                VARCHAR(255) UNIQUE NOT NULL,
+  role                 ENUM('admin','agent','citizen') DEFAULT 'agent',
+  is_active            TINYINT DEFAULT 0,
+  reset_token          VARCHAR(255) NULL,
+  reset_token_expires  DATETIME NULL,
+  approved_by          INT NULL,
+  approved_at          DATETIME NULL,
+  deleted_at           DATETIME NULL,
+  created_at           DATETIME DEFAULT CURRENT_TIMESTAMP,
   INDEX idx_users_email              (email),
+  INDEX idx_users_reset_token        (reset_token),
   INDEX idx_users_approved_by        (approved_by),
   INDEX idx_users_role_active        (role, is_active),
   INDEX idx_users_role_active_deleted(role, is_active, deleted_at),
   FOREIGN KEY (approved_by) REFERENCES users(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- Comptes par défaut  (admin / admin123 | agent1 / agent123 | lecteur1 / lecteur123)
-INSERT INTO users (username, password_hash, full_name, role, is_active) VALUES
-('admin',    '$2a$10$uHPk/xFXEPPMzI8Fo8D.U.Kq2Vai69aWkQpoEfZgUv6AcCmD6UndG', 'Administrateur', 'admin',   1),
-('agent1',   '$2a$10$qxgXFY9DBFlahAAJyIZ84u/xy6Wxn34s37xsPadW1o0gP2PdXJfOa', 'Agent Test',     'agent',   1),
-('lecteur1', '$2a$10$iI1D3ZccpHT77lKRzs1gpuF.mzxd/CCm4L8fv1lBojERWTXn2/Ie2', 'Lecteur Test',   'lecteur', 1);
+-- Comptes par défaut  (admin / admin123 | agent1 / agent123)
+INSERT INTO users (username, password_hash, full_name, email, role, is_active) VALUES
+('admin',    '$2a$10$uHPk/xFXEPPMzI8Fo8D.U.Kq2Vai69aWkQpoEfZgUv6AcCmD6UndG', 'Administrateur', 'admin@khemisset.gov.ma',    'admin',   1),
+('agent1',   '$2a$10$qxgXFY9DBFlahAAJyIZ84u/xy6Wxn34s37xsPadW1o0gP2PdXJfOa', 'Agent Test',     'agent1@khemisset.gov.ma',   'agent',   1);
 
 -- ============================================================
 -- TABLE DEMANDES
@@ -386,10 +388,20 @@ INSERT IGNORE INTO licence_configs (licence_type, label_fr, label_ar, documents_
 );
 
 -- ============================================================
+-- MIGRATION : email obligatoire + forgot password
+-- ============================================================
+-- Pour les bases existantes, exécuter ces commandes :
+-- ALTER TABLE users ADD COLUMN reset_token VARCHAR(255) NULL AFTER is_active;
+-- ALTER TABLE users ADD COLUMN reset_token_expires DATETIME NULL AFTER reset_token;
+-- ALTER TABLE users ADD INDEX idx_users_reset_token (reset_token);
+-- ALTER TABLE users MODIFY email VARCHAR(255) NOT NULL;
+-- ALTER TABLE users ADD UNIQUE INDEX idx_users_email_unique (email);
+
+-- ============================================================
 -- CONFIRMATION
 -- ============================================================
 SELECT
-  'khemisset_db créée avec succès'                           AS statut,
+  'kh_data créée avec succès'                           AS statut,
   (SELECT COUNT(*) FROM users)                               AS nb_users,
   (SELECT COUNT(*) FROM licence_configs)                     AS nb_licence_configs,
   (SELECT GROUP_CONCAT(licence_type) FROM licence_configs)   AS types_licences;

@@ -2,7 +2,6 @@ import React from 'react';
 import {
   FileText,
   Printer,
-  Pencil,
   Eye,
   ChevronLeft,
   ChevronRight
@@ -10,6 +9,7 @@ import {
 import { Button, Badge, EmptyState, RingLoader, TableSkeleton } from '../ui';
 import { Inbox } from 'lucide-react';
 import { t } from '../../i18n/translations';
+import { STATUS_CONFIG } from '../../utils/workflowStatusConfig';
 
 function initials(name) {
   if (!name || typeof name !== 'string') return '?';
@@ -19,28 +19,28 @@ function initials(name) {
   return (p[0][0] + p[p.length - 1][0]).toUpperCase();
 }
 
-/**
- * Statuts disponibles dans le sélecteur du tableau agent.
- * NOTE : avis_favorable = avis de l'agent (dossier envoyé au Gouverneur).
- *        accepte / refuse = décision finale du Gouverneur (enregistrée par l'agent après signature).
- */
-const STATUS_OPTIONS = [
-  { value: 'en_cours_analyse' },
-  { value: 'documents_rejetes' },
-  { value: 'documents_corriges' },
-  { value: 'avis_favorable' },
-  { value: 'decision_imprimee' },
-  { value: 'accepte' },
-  { value: 'refuse' },
-  { value: 'archive' }
+const AGENT_STATUS_OPTIONS = [
+  { value: 'en_cours_analyse', label_fr: "En cours d'étude", label_ar: 'قيد الدراسة' },
+  { value: 'documents_rejetes', label_fr: 'Refusé', label_ar: 'مرفوض' },
+  { value: 'avis_favorable', label_fr: 'Validé provisoirement', label_ar: 'تم التصديق مؤقتاً' },
+  { value: 'decision_imprimee', label_fr: 'Décision imprimée', label_ar: 'القرار مطبوع' },
+  { value: 'accepte', label_fr: 'Accepté (Gouverneur)', label_ar: 'مقبول (المحافظ)' },
+  { value: 'refuse', label_fr: 'Refusé (Gouverneur)', label_ar: 'مرفوض (المحافظ)' },
 ];
+
+const TRANSITIONS_VALIDES = {
+  en_cours_analyse: ['documents_rejetes', 'avis_favorable', 'decision_imprimee'],
+  avis_favorable: ['decision_imprimee'],
+  decision_imprimee: ['accepte', 'refuse'],
+  documents_rejetes: ['en_cours_analyse'],
+  documents_corriges: ['en_cours_analyse'],
+};
 
 export default function DemandesTable({
   isRtl,
   lang = 'fr',
   loading,
   demandes,
-  STATUS_CONFIG,
   formatDate,
   searchTotal,
   currentPage,
@@ -52,7 +52,6 @@ export default function DemandesTable({
   isAdminRole,
   pdfLoading,
   onTrack,
-  onEdit,
   onPdf,
   onPrint,
   onStatusChange,
@@ -110,6 +109,10 @@ export default function DemandesTable({
                 const pdfKey = `pdf_${d.id}`;
                 const canEditThis = canEditDemande(d);
                 const canPdfThis = canGeneratePdf(d);
+                const agentStatusOptions = AGENT_STATUS_OPTIONS.filter(opt => {
+                  const validNext = TRANSITIONS_VALIDES[d.statut];
+                  return validNext && validNext.includes(opt.value);
+                });
                 return (
                   <tr
                     key={d.id}
@@ -187,16 +190,26 @@ export default function DemandesTable({
                           </>
                         )}
                         {canEditThis && (
-                          <>
-                            <Button type="button" size="sm" variant="ghost" className="!px-2" onClick={() => onEdit(d)}>
-                              <Pencil className="h-4 w-4" />
-                            </Button>
-                            {['en_cours_analyse', 'depose', 'documents_corriges', 'en_attente'].includes(d.statut) && (
-                              <Button type="button" size="sm" variant="outline" className="!text-rose-700" onClick={() => onRejectDocs(d)}>
-                                {t(lang, 'dtReject')}
-                              </Button>
-                            )}
-                          </>
+                          <select
+                            value=""
+                            onChange={(e) => {
+                              if (e.target.value) {
+                                onStatusChange(d.id, e.target.value);
+                                e.target.value = '';
+                              }
+                            }}
+                            className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs font-medium text-slate-700 shadow-sm transition hover:border-slate-300 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200 dark:hover:border-slate-500 cursor-pointer"
+                            title={isRtl ? 'تغيير الحالة' : 'Changer le statut'}
+                          >
+                            <option value="">
+                              {isRtl ? '⋯' : '⋯'}
+                            </option>
+                            {agentStatusOptions.map(opt => (
+                              <option key={opt.value} value={opt.value}>
+                                {isRtl ? opt.label_ar : opt.label_fr}
+                              </option>
+                            ))}
+                          </select>
                         )}
                       </div>
                     </td>

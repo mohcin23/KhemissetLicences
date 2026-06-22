@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { demandesAPI } from '../../services/api';
 import { STATUS_CONFIG } from '../../utils/workflowStatusConfig';
+import { DECISION_PDF_STATUSES } from '../../utils/appConstants';
 import WorkflowTimeline from '../../components/workflow/WorkflowTimeline';
 import PiecesJointesPanel from '../../components/demandes/PiecesJointesPanel';
 import CorrectInfoModal from '../../components/workflow/CorrectInfoModal';

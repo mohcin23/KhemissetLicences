@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FileText, Download } from 'lucide-react';
+import { Download } from 'lucide-react';
 import { PageShell, Button, FilterBar, FilterSelect } from '../../components/ui';
 import DemandesTable from '../../components/demandes/DemandesTable';
 import LicenceBadge from '../../components/licences/LicenceBadge';
@@ -13,7 +13,6 @@ import { STATUS_CONFIG } from '../../utils/workflowStatusConfig';
 import { formatDate } from '../../utils/formatters';
 import { ACTIVE_AGENT_STATUSES, PAGE_SIZE, DECISION_PDF_STATUSES } from '../../utils/appConstants';
 import RejectDocumentsModal from '../../components/workflow/RejectDocumentsModal';
-import EditDemandeModal from '../../components/employee/EditDemandeModal';
 
 export default function SearchPage({ onShowConfirm, onTrackNavigate, onChooseDecisionLanguage }) {
   const navigate = useNavigate();
@@ -38,7 +37,6 @@ export default function SearchPage({ onShowConfirm, onTrackNavigate, onChooseDec
   const [sortDir, setSortDir] = useState('desc');
   const [treatedTodayOnly, setTreatedTodayOnly] = useState(false);
   const [pdfLoading, setPdfLoading] = useState({});
-  const [editingDemande, setEditingDemande] = useState(null);
   const [agentDashboard, setAgentDashboard] = useState(null);
   const [rejectingFile, setRejectingFile] = useState(null);
   const [fileRejectMotif, setFileRejectMotif] = useState('');
@@ -148,31 +146,11 @@ export default function SearchPage({ onShowConfirm, onTrackNavigate, onChooseDec
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `licences_pharmacies_${new Date().toISOString().slice(0, 10)}.xlsx`;
+      a.download = `export_licences_${new Date().toISOString().slice(0, 10)}.xlsx`;
       a.click();
       window.URL.revokeObjectURL(url);
       try { await auditAPI.logExcelExport({ action: 'EXPORT_EXCEL_DEMANDES', entity_type: 'demandes', details: { total: rows.length, search, statut: statusFilter, commune: filterCommune } }); } catch {}
     } catch { showToast(isRtl ? 'خطأ في التصدير' : 'Erreur export Excel', 'error'); }
-  };
-
-  const openEditModal = (d) => {
-    if (!canEditDemande()) { showToast(forbiddenMessage, 'error'); return; }
-    setEditingDemande(d);
-  };
-
-  const closeEditModal = () => { setEditingDemande(null); };
-
-  const handleEditSubmit = async (id, editForm) => {
-    setLoading(true);
-    try {
-      await demandesAPI.update(id, editForm);
-      closeEditModal();
-      await fetchDemandes();
-      showToast(isRtl ? 'تم تحديث الطلب بنجاح' : 'Demande modifiée avec succès');
-    } catch (err) {
-      showToast(err.response?.data?.message || (isRtl ? 'خطأ في التحديث' : 'Erreur modification'), 'error');
-    }
-    setLoading(false);
   };
 
   const handleDelete = (id) => {
@@ -190,7 +168,13 @@ export default function SearchPage({ onShowConfirm, onTrackNavigate, onChooseDec
     if (!canEditDemande()) { showToast(forbiddenMessage, 'error'); return; }
     if (statut === 'documents_rejetes') { openRejectFileModal(demande); return; }
     try {
-      await demandesAPI.updateStatut(id, statut, extraData.notes ? { notes: extraData.notes } : {});
+      if (statut === 'accepte') {
+        await demandesAPI.accepterDefinitif(id, { commentaire: extraData.notes || null });
+      } else if (statut === 'refuse') {
+        await demandesAPI.refuserGouverneur(id, { notes: extraData.notes || 'Refusé par l\'employé' });
+      } else {
+        await demandesAPI.updateStatut(id, statut, extraData.notes ? { notes: extraData.notes } : {});
+      }
       fetchDemandes(); await fetchAgentDashboard();
     } catch (err) { showToast(err.response?.data?.message || (isRtl ? 'خطأ في تحديث الحالة' : 'Erreur mise à jour statut'), 'error'); }
   };
@@ -244,11 +228,12 @@ export default function SearchPage({ onShowConfirm, onTrackNavigate, onChooseDec
       >
         {/* Filters */}
         <FilterBar
+          lang={lang}
           searchValue={search}
           onSearchChange={setSearch}
           searchPlaceholder={isRtl ? 'بحث بالاسم أو رقم البطاقة أو رقم الملف...' : 'Rechercher par nom, CIN ou n° dossier...'}
           total={searchTotal}
-          totalLabel="dossiers dans la vue actuelle"
+          totalLabel={t(lang, 'filterBarCurrentView')}
           hasActiveFilters={hasActiveFilters}
           onClearFilters={clearAllFilters}
         >
@@ -349,7 +334,6 @@ export default function SearchPage({ onShowConfirm, onTrackNavigate, onChooseDec
           lang={lang}
           loading={loading}
           demandes={demandes}
-          STATUS_CONFIG={STATUS_CONFIG}
           formatDate={formatDate}
           searchTotal={searchTotal}
           currentPage={currentPage}
@@ -361,7 +345,6 @@ export default function SearchPage({ onShowConfirm, onTrackNavigate, onChooseDec
           isAdminRole={isAdminRole}
           pdfLoading={pdfLoading}
           onTrack={onTrackNavigate}
-          onEdit={openEditModal}
           onPdf={handlePdf}
           onPrint={handlePrintPdf}
           onStatusChange={handleStatusChange}
@@ -376,7 +359,6 @@ export default function SearchPage({ onShowConfirm, onTrackNavigate, onChooseDec
         />
       </PageShell>
 
-      <EditDemandeModal editingDemande={editingDemande} onClose={closeEditModal} onSubmit={handleEditSubmit} loading={loading} lang={lang} isRtl={isRtl} />
       <RejectDocumentsModal open={Boolean(rejectingFile)} onClose={closeRejectFileModal} onSubmit={handleRejectFileSubmit}
         numeroDossier={rejectingFile?.numero_dossier} motif={fileRejectMotif} onMotifChange={setFileRejectMotif}
         loading={fileRejectLoading} error={fileRejectApiError} lang={lang} />

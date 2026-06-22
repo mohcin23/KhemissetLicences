@@ -1,6 +1,7 @@
 import React from 'react';
 import { Bell, CheckCheck, FileText, CheckCircle2, XCircle, Edit3 } from 'lucide-react';
 import { t } from '../../i18n/translations';
+import { translateNotification } from '../../utils/notificationTranslator';
 
 const NOTIF_ICONS = {
   nouveau_dossier: FileText,
@@ -55,10 +56,10 @@ export default function NotificationsPage({
       {/* Tabs */}
       <div className="flex gap-1 mb-4 border-b border-slate-200">
         <button className="px-4 py-2 text-sm font-semibold border-b-2 border-[#27ab83] text-[#27ab83]">
-          Non lues {unreadCount > 0 && <span className="ml-1 bg-[#27ab83] text-white text-xs px-1.5 py-0.5 rounded-full">{unreadCount}</span>}
+          {t(lang, 'notifTabUnread')}{unreadCount > 0 && <span className="ml-1 bg-[#27ab83] text-white text-xs px-1.5 py-0.5 rounded-full">{unreadCount}</span>}
         </button>
         <button className="px-4 py-2 text-sm font-medium text-slate-500 hover:text-slate-700">
-          Toutes
+          {t(lang, 'notifTabAll')}
         </button>
       </div>
 
@@ -89,6 +90,7 @@ export default function NotificationsPage({
             const Icon = NOTIF_ICONS[type] || NOTIF_ICONS.default;
             const borderColor = NOTIF_COLORS[type] || NOTIF_COLORS.default;
             const iconBg = NOTIF_ICON_BG[type] || NOTIF_ICON_BG.default;
+            const { titre, message } = translateNotification(notif, lang);
             return (
               <div
                 key={notif.id}
@@ -100,10 +102,10 @@ export default function NotificationsPage({
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-1">
-                    <h3 className="font-bold text-slate-900 text-sm truncate">{notif.titre}</h3>
+                    <h3 className="font-bold text-slate-900 text-sm truncate">{titre}</h3>
                     {!notif.is_read && <span className="w-2 h-2 rounded-full bg-teal-500 flex-shrink-0"></span>}
                   </div>
-                  <p className="text-sm text-slate-500">{notif.message}</p>
+                  <p className="text-sm text-slate-500">{message}</p>
                   <div className="text-xs text-slate-400 mt-2">{formatRelativeTime(notif.created_at)}</div>
                 </div>
               </div>

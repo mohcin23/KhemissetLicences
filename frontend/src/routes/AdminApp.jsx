@@ -225,8 +225,7 @@ export default function AdminApp() {
   const roleBadges = {
     admin: { label: t(lang, 'roleAdmin'), className: 'role-admin' },
     agent: { label: t(lang, 'roleAgent'), className: 'role-agent' },
-    lecteur: { label: t(lang, 'roleLecteur'), className: 'role-lecteur' },
-    citizen: { label: t(lang, 'citizen'), className: 'role-lecteur' }
+    citizen: { label: t(lang, 'citizen'), className: 'role-agent' }
   };
 
   const agentNavItems = [
@@ -255,7 +254,7 @@ export default function AdminApp() {
       >
         <div className="min-h-[calc(100vh-160px)] mx-auto w-full max-w-7xl">
           <Routes>
-            <Route path="dashboard" element={<DashboardPage />} />
+            <Route path="dashboard" element={<DashboardPage lang={lang} isRtl={isRtl} />} />
             <Route path="search" element={
               <SearchPage
                 onShowConfirm={showConfirm}
@@ -277,7 +276,8 @@ export default function AdminApp() {
                   piecesJointes={piecesJointes} pjLoading={pjLoading} pjUploading={pjUploading}
                   isAgentRole={isAgentRole} onBack={() => navigate('/app/search')}
                   onUploadPj={handleAgentUploadPj} onDeletePj={handleAgentDeletePj}
-                  showToast={showToast} />
+                  showToast={showToast}
+                  onDemandeUpdated={(updated) => setSelectedDemande(updated)} />
               ) : <div className="min-h-[200px]"><EmptyState icon={() => <span>❓</span>} title={t(lang, 'page404Title')} description={t(lang, 'page404Desc')} action={<Button type="button" variant="primary" onClick={() => navigate('/app/search')}>{t(lang, 'page404Btn')}</Button>} /></div>
             } />
             <Route path="advancedSearch" element={isAdminRole ? (

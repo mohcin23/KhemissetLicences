@@ -1,7 +1,9 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { ocrAPI, notificationsAPI, citizenAPI } from '../../services/api';
 import { getLicenceDocs, LICENCE_VIEW_META, mergeOcrIntoForm } from '../../constants/licenceConfig';
 import { t } from '../../i18n/translations';
+import { translateNotification } from '../../utils/notificationTranslator';
 import { useTheme } from '../../contexts/ThemeContext';
 import { STATUS_CONFIG } from '../../utils/workflowStatusConfig';
 import { dateInputValue, formatRelativeTime } from '../../utils/formatters';
@@ -11,9 +13,20 @@ import LicenceSelector from '../../components/licences/LicenceSelector';
 import DynamicLicenceForm from '../../components/licences/DynamicLicenceForm';
 import Stepper from '../../components/licences/Stepper';
 import WorkflowTimeline from '../../components/workflow/WorkflowTimeline';
-import { ArrowLeft, Building2, Clock, FileText, MapPin, Phone, Mail, User } from 'lucide-react';
+import { ArrowLeft, Building2, Clock, FileText, MapPin, Phone, Mail, User, LayoutDashboard, Plus, MessageSquare, FolderOpen, AlertTriangle, CheckCircle2, Search } from 'lucide-react';
+import CitizenAiChat from '../../components/citizen/CitizenAiChat';
 
 const CITIZEN_DRAFT_KEY = 'draft_demande_citizen';
+
+const PAGE_TO_PATH = {
+  dashboard: 'dashboard',
+  new: 'nouvelle-demande',
+  track: 'suivi',
+  correct: 'correction',
+  contact: 'contact',
+  success: 'succes',
+};
+const PATH_TO_PAGE = Object.fromEntries(Object.entries(PAGE_TO_PATH).map(([k, v]) => [v, k]));
 
 const emptyForm = {
   nom_complet: '', cin: '', date_naissance: '',
@@ -21,7 +34,9 @@ const emptyForm = {
   adresse_complete: '',
   date_demande: '', date_izin: '', numero_izin: '',
   nom_massah: '', date_massah: '', date_lajna: '',
-  commune: '', cercle: '', notes: ''
+  commune: '', cercle: '',
+  nom_complet_ar: '', universite_ar: '', diplome_ar: '',
+  adresse_complete_ar: '', commune_ar: '', cercle_ar: '', nom_massah_ar: ''
 };
 
 const compressCitizenImageForOcr = (file) => new Promise((resolve, reject) => {
@@ -61,27 +76,57 @@ const filePreviewUrl = (file) => new Promise((resolve) => {
   reader.readAsDataURL(file);
 });
 
-const formFromDemande = (demande) => ({
-  nom_complet: demande.nom_complet || '',
-  cin: demande.cin || '',
-  date_naissance: dateInputValue(demande.date_naissance),
-  universite: demande.universite || '',
-  diplome: demande.diplome || '',
-  adresse_complete: demande.adresse_complete || '',
-  date_demande: dateInputValue(demande.date_demande),
-  date_izin: dateInputValue(demande.date_izin),
-  numero_izin: demande.numero_izin || '',
-  nom_massah: demande.nom_massah || '',
-  date_massah: dateInputValue(demande.date_massah),
-  date_lajna: dateInputValue(demande.date_lajna),
-  commune: demande.commune || '',
-  cercle: demande.cercle || '',
-  notes: demande.notes || ''
-});
+const formFromDemande = (demande) => {
+  let extraData = {};
+  try {
+    extraData = demande.extra_data && typeof demande.extra_data === 'string'
+      ? JSON.parse(demande.extra_data)
+      : demande.extra_data || {};
+  } catch {}
+
+  return {
+    nom_complet: demande.nom_complet || '',
+    cin: demande.cin || '',
+    date_naissance: dateInputValue(demande.date_naissance),
+    universite: demande.universite || '',
+    diplome: demande.diplome || '',
+    adresse_complete: demande.adresse_complete || '',
+    date_demande: dateInputValue(demande.date_demande),
+    date_izin: dateInputValue(demande.date_izin),
+    numero_izin: demande.numero_izin || '',
+    nom_massah: demande.nom_massah || '',
+    date_massah: dateInputValue(demande.date_massah),
+    date_lajna: dateInputValue(demande.date_lajna),
+    commune: demande.commune || '',
+    cercle: demande.cercle || '',
+    nom_complet_ar: extraData.nom_complet_ar || '',
+    universite_ar: extraData.universite_ar || '',
+    diplome_ar: extraData.diplome_ar || '',
+    adresse_complete_ar: extraData.adresse_complete_ar || '',
+    commune_ar: extraData.commune_ar || '',
+    cercle_ar: extraData.cercle_ar || '',
+    nom_massah_ar: extraData.nom_massah_ar || '',
+  };
+};
 
 export default function CitizenPortal({ lang: initialLang, setLang: setGlobalLang, authUser, handleLogout, showToast, toast }) {
   const { theme, toggleTheme } = useTheme();
-  const [page, setPage] = useState('dashboard');
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  const getPageFromPath = useCallback(() => {
+    const segments = location.pathname.split('/').filter(Boolean);
+    const slug = segments[1] || 'dashboard';
+    return PATH_TO_PAGE[slug] || 'dashboard';
+  }, [location.pathname]);
+
+  const page = getPageFromPath();
+
+  const navigateTo = useCallback((newPage, extra = {}) => {
+    const slug = PAGE_TO_PATH[newPage] || 'dashboard';
+    const path = extra.numero ? `/citizen/${slug}/${extra.numero}` : `/citizen/${slug}`;
+    navigate(path);
+  }, [navigate]);
   const [demandes, setDemandes] = useState([]);
   const [selectedDemande, setSelectedDemande] = useState(null);
   const [form, setForm] = useState(emptyForm);
@@ -99,6 +144,8 @@ export default function CitizenPortal({ lang: initialLang, setLang: setGlobalLan
   const [publicTrackResult, setPublicTrackResult] = useState(null);
   const [publicTrackLoading, setPublicTrackLoading] = useState(false);
   const [publicTrackError, setPublicTrackError] = useState('');
+  const [cancelConfirmId, setCancelConfirmId] = useState(null);
+  const [cancelLoading, setCancelLoading] = useState(false);
   const [citizenLang, setCitizenLang] = useState(() => {
     try { return localStorage.getItem('citizen_ui_lang') || 'fr'; } catch { return 'fr'; }
   });
@@ -236,7 +283,7 @@ export default function CitizenPortal({ lang: initialLang, setLang: setGlobalLan
       try {
         const res = await citizenAPI.getById(notif.demande_id);
         setSelectedDemande(res.data.data);
-        setPage('track');
+        navigateTo('track', { numero: res.data.data.numero_dossier });
         setCitizenNotifOpen(false);
         loadPiecesJointes(res.data.data.id);
       } catch {
@@ -371,7 +418,7 @@ export default function CitizenPortal({ lang: initialLang, setLang: setGlobalLan
     try {
       const res = await citizenAPI.getById(demande.id);
       setSelectedDemande(res.data.data);
-      setPage('track');
+      navigateTo('track', { numero: demande.numero_dossier });
       loadPiecesJointes(demande.id);
     } catch (err) {
       showCitizenToast.current(err.response?.data?.message || t(citizenLang, 'toastDemandeNotFound'), 'error');
@@ -387,7 +434,7 @@ export default function CitizenPortal({ lang: initialLang, setLang: setGlobalLan
       const current = res.data.data;
       setSelectedDemande(current);
       setCorrectionForm(formFromDemande(current));
-      setPage('correct');
+      navigateTo('correct', { numero: current.numero_dossier });
     } catch (err) {
       showCitizenToast.current(err.response?.data?.message || t(citizenLang, 'toastDemandeNotFound'), 'error');
     } finally {
@@ -481,12 +528,26 @@ export default function CitizenPortal({ lang: initialLang, setLang: setGlobalLan
       const res = await citizenAPI.update(selectedDemande.id, correctionForm);
       setSelectedDemande(res.data.data);
       await loadDemandes();
-      setPage('track');
+      navigateTo('track', { numero: res.data.data.numero_dossier });
       showCitizenToast.current(t(citizenLang, 'authGatewayCorrectBtn'));
     } catch (err) {
       showCitizenToast.current(err.response?.data?.message || t(citizenLang, 'errorCreate'), 'error');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleCancelDemande = async (demandeId) => {
+    try {
+      await citizenAPI.annuler(demandeId);
+      await loadDemandes();
+      if (selectedDemande?.id === demandeId) {
+        const res = await citizenAPI.getById(demandeId);
+        setSelectedDemande(res.data.data);
+      }
+      showCitizenToast.current(t(citizenLang, 'cancelRequestSuccess'), 'success');
+    } catch (err) {
+      showCitizenToast.current(err.response?.data?.message || t(citizenLang, 'cancelRequestError'), 'error');
     }
   };
 
@@ -519,7 +580,7 @@ export default function CitizenPortal({ lang: initialLang, setLang: setGlobalLan
       localStorage.removeItem(CITIZEN_DRAFT_KEY);
       setCitizenDraft(null);
       await loadDemandes();
-      setPage('success');
+      navigateTo('success');
     } catch (err) {
       showCitizenToast.current(err.response?.data?.message || t(citizenLang, 'errorCreate'), 'error');
     } finally {
@@ -531,40 +592,141 @@ export default function CitizenPortal({ lang: initialLang, setLang: setGlobalLan
     <div className={`${isRtl ? 'font-[Cairo]' : ''} min-h-screen bg-slate-50 dark:bg-slate-950 text-[#0f172a] dark:text-slate-100 transition-colors duration-200 px-0 sm:px-0`} dir={isRtl ? 'rtl' : 'ltr'}>
       {toast && <div className={`fixed top-5 left-1/2 -translate-x-1/2 z-[9999] px-5 py-3 rounded-xl text-sm font-bold shadow-[0_10px_40px_rgba(0,0,0,0.2)] animate-[slideDown_0.3s_ease] ${toast.type === 'success' ? 'bg-accent-500 text-white' : toast.type === 'error' ? 'bg-[#dc2626] text-white' : 'bg-[#2563eb] text-white'}`}>{toast.msg}</div>}
 
-      <header className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 sticky top-0 z-50 shadow-sm">
-        <div className="px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between">
-          <div className={`flex items-center space-x-3 sm:space-x-4 flex-none ${isRtl ? '-mr-3' : '-ml-3'}`}>
-            <div className="w-11 h-11 sm:w-11 sm:h-11 rounded-xl flex items-center justify-center overflow-hidden shrink-0">
-              <img src="/logo.jpg" alt="Logo Province" className="w-full h-full object-cover" />
+      <header className="bg-white/95 dark:bg-slate-900/95 border-b border-slate-200 dark:border-slate-800 sticky top-0 z-50 backdrop-blur-md shadow-sm">
+        <div className="px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between gap-4">
+          {/* Logo + Title */}
+          <div className="flex items-center gap-3 flex-none min-w-0">
+            <div className="w-11 h-11 rounded-xl overflow-hidden ring-2 ring-slate-100 dark:ring-slate-700 shrink-0">
+              <img src="/logo.jpg" alt="" className="w-full h-full object-cover" />
             </div>
             <div className="min-w-0">
-              <h1 className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white tracking-wide truncate">Province de Khémisset</h1>
-              <p className="text-[10px] sm:text-[11px] font-medium text-[#64748B] tracking-wider uppercase mt-0.5">Espace Citoyen</p>
+              <h1 className="text-sm font-bold text-slate-900 dark:text-white truncate leading-tight">{t(citizenLang, 'headerProvinceName')}</h1>
+              <p className="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 tracking-wide mt-0.5">{t(citizenLang, 'headerCitizenSpace')}</p>
             </div>
           </div>
 
-          <nav className="hidden md:flex items-center justify-end space-x-8 flex-1 mr-4">
-            <button onClick={() => { setPage('dashboard'); setSubmittedNumero(''); }} className={`text-sm font-bold transition-all py-2 ${page === 'dashboard' ? 'text-[#10B981] border-b-2 border-[#10B981]' : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-white'}`}>
+          {/* Desktop: Navigation + Actions */}
+          <div className="hidden md:flex items-center gap-3 flex-none">
+            {/* Navigation */}
+            <button onClick={() => { navigateTo('dashboard'); setSubmittedNumero(''); }} className={`inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-xl transition-all duration-200 ${page === 'dashboard' ? 'text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/20 shadow-sm' : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-white hover:bg-slate-50 dark:hover:bg-slate-800/50'}`}>
+              <LayoutDashboard className="w-4 h-4" />
               {t(citizenLang, 'authGatewayMyRequests')}
             </button>
-            <button onClick={() => { setPage('new'); setSubmittedNumero(''); setLicenceType(null); }} className={`text-sm font-semibold transition-all py-2 ${page === 'new' ? 'text-[#10B981] border-b-2 border-[#10B981]' : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-white'}`}>
-              {citizenLang === 'ar' ? 'طلب جديد' : 'Nouvelle demande'}
+            <button onClick={() => { navigateTo('new'); setSubmittedNumero(''); setLicenceType(null); }} className={`inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-xl transition-all duration-200 ${page === 'new' ? 'text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/20 shadow-sm' : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-white hover:bg-slate-50 dark:hover:bg-slate-800/50'}`}>
+              <Plus className="w-4 h-4" />
+              {t(citizenLang, 'authGatewayNewRequest')}
             </button>
-            <button onClick={() => { setPage('contact'); setSubmittedNumero(''); }} className={`text-sm font-semibold transition-all py-2 ${page === 'contact' ? 'text-[#10B981] border-b-2 border-[#10B981]' : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-white'}`}>
-              Contact
+            <button onClick={() => { navigateTo('contact'); setSubmittedNumero(''); }} className={`inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-xl transition-all duration-200 ${page === 'contact' ? 'text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/20 shadow-sm' : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-white hover:bg-slate-50 dark:hover:bg-slate-800/50'}`}>
+              <MessageSquare className="w-4 h-4" />
+              {t(citizenLang, 'headerContact')}
             </button>
-          </nav>
 
-          <div className="flex items-center justify-end space-x-5 flex-none">
+            <div className="h-7 w-px bg-slate-200 dark:bg-slate-700 mx-1"></div>
+
+            {/* Utilities */}
+            <div className="relative" ref={notifRef}>
+              <button type="button" className="text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 transition-colors relative w-9 h-9 flex items-center justify-center rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800" aria-label={t(citizenLang, 'notifTitle')} onClick={toggleCitizenNotifications}>
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/></svg>
+                {citizenUnreadCount > 0 && <span className="absolute -top-[5px] end-[-5px] min-w-[18px] h-[18px] px-[4px] rounded-full bg-red-500 text-white text-[10px] font-bold leading-none inline-flex items-center justify-center border-[2px] border-white dark:border-slate-900">{citizenUnreadCount > 99 ? '99+' : citizenUnreadCount}</span>}
+              </button>
+              {citizenNotifOpen && (
+                <div className="absolute top-full end-0 mt-2 w-[min(380px,calc(100vw-32px))] overflow-hidden border border-slate-200 dark:border-slate-700 rounded-2xl bg-white dark:bg-slate-800 shadow-[0_10px_25px_-5px_rgba(0,0,0,0.08)] dark:shadow-[0_10px_25px_-5px_rgba(0,0,0,0.3)] z-80">
+                  <div className="px-5 py-4 border-b border-slate-100 dark:border-slate-700 bg-slate-50 dark:bg-slate-700/50 rounded-t-2xl">
+                    <p className="text-[11px] text-slate-400 dark:text-slate-500 font-semibold uppercase tracking-wider mb-1">{t(citizenLang, 'notifDropdownTitle')}</p>
+                    <button type="button" className="text-xs font-bold text-emerald-600 cursor-pointer bg-transparent border-none" onClick={markAllCitizenNotificationsRead}>
+                      {t(citizenLang, 'notifMarkAllRead')}
+                    </button>
+                  </div>
+                  <div className="p-2">
+                    {citizenNotifLoading ? (
+                      <div className="p-4 text-center text-slate-500 text-sm">{t(citizenLang, 'notifLoading')}</div>
+                    ) : citizenNotifications.length === 0 ? (
+                      <div className="p-4 text-center text-slate-500 text-sm">{t(citizenLang, 'notifEmptyList')}</div>
+                    ) : (
+                      <>
+                        {citizenNotifications.map(notif => {
+                          const translated = translateNotification(notif, citizenLang);
+                          return (
+                          <button key={notif.id} type="button" className={`w-full block border-0 border-b border-slate-100 dark:border-slate-700 bg-white dark:bg-slate-800 p-3 rounded-xl text-slate-800 dark:text-slate-200 text-start cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors${notif.is_read ? '' : ' bg-emerald-50/50 dark:bg-emerald-900/20 shadow-[inset_3px_0_0_#10b981]'}`} onClick={() => handleCitizenNotificationClick(notif)}>
+                            <strong className="block text-sm">{translated.titre}</strong>
+                            <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{translated.message}</p>
+                            <small className="mt-1.5 block text-xs text-slate-400 dark:text-slate-500">{formatRelativeTime(notif.created_at, citizenLang)}</small>
+                          </button>
+                          );
+                        })}
+                        {citizenNotifHasMore && (
+                          <button type="button" className="w-full border-0 bg-transparent text-emerald-600 cursor-pointer font-bold p-3 text-center text-sm" onClick={loadMoreCitizenNotifications}>
+                            {t(citizenLang, 'notifViewAll')}
+                          </button>
+                        )}
+                      </>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="flex items-center bg-slate-100 dark:bg-slate-800 rounded-xl p-0.5 shadow-inner">
+              <button className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all ${citizenLang === 'ar' ? 'bg-white dark:bg-slate-600 text-slate-900 dark:text-white shadow-sm' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300'}`} onClick={() => { if (citizenLang !== 'ar') handleLangToggle(); }}>AR</button>
+              <button className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all ${citizenLang === 'fr' ? 'bg-white dark:bg-slate-600 text-slate-900 dark:text-white shadow-sm' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300'}`} onClick={() => { if (citizenLang !== 'fr') handleLangToggle(); }}>FR</button>
+            </div>
+
+            <button
+              type="button"
+              onClick={toggleTheme}
+              className="w-9 h-9 flex items-center justify-center rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-white transition-all"
+              aria-label={theme === 'dark' ? 'Mode clair' : 'Mode sombre'}
+            >
+              {theme === 'dark' ? (
+                <svg className="w-[18px] h-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
+              ) : (
+                <svg className="w-[18px] h-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/></svg>
+              )}
+            </button>
+
+            <div className="h-7 w-px bg-slate-200 dark:bg-slate-700"></div>
+
+            <div className="relative profile-group cursor-pointer" ref={avatarRef}>
+              <div className="flex items-center gap-2" onClick={() => setAvatarOpen(!avatarOpen)}>
+                <div className="w-9 h-9 rounded-full bg-emerald-500 text-white flex items-center justify-center font-bold text-sm shadow-sm">
+                  {(authUser.full_name || authUser.username || 'C')[0].toUpperCase()}
+                </div>
+                <svg className={`w-4 h-4 text-slate-400 transition-transform duration-200 ${avatarOpen ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7"/></svg>
+              </div>
+
+              {avatarOpen && (
+                <div className="absolute end-0 mt-2 w-64 max-w-[calc(100vw-32px)] bg-white dark:bg-slate-800 rounded-2xl shadow-xl border border-slate-100 dark:border-slate-700 py-4 z-50">
+                  <div className="px-5 pb-4 border-b border-slate-100 dark:border-slate-700">
+                    <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 tracking-wider uppercase">{t(citizenLang, 'connectedLabel')}</p>
+                    <p className="text-sm font-bold text-slate-800 dark:text-white mt-1">{authUser.full_name || authUser.username}</p>
+                  </div>
+                  <div className="pt-2">
+                    <button className="w-full flex items-center px-5 py-3 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors group bg-transparent border-none cursor-pointer">
+                      <div className="w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-700 flex items-center justify-center ms-3 text-slate-500 dark:text-slate-400 group-hover:text-slate-700 dark:group-hover:text-white">
+                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+                      </div>
+                      <span className="text-sm font-medium text-slate-700 dark:text-slate-200">{t(citizenLang, 'settingsLabel')}</span>
+                    </button>
+                    <button className="w-full flex items-center px-5 py-3 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors group bg-transparent border-none cursor-pointer" onClick={handleLogout}>
+                      <div className="w-8 h-8 rounded-full bg-red-50 dark:bg-red-900/30 flex items-center justify-center ms-3 text-red-500">
+                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/></svg>
+                      </div>
+                      <span className="text-sm font-bold text-red-500">{t(citizenLang, 'deconnexion')}</span>
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
             {/* Mobile: bell + hamburger */}
             <div className="flex md:hidden items-center gap-1">
               <div className="relative" ref={notifRef}>
                 <button type="button" className="text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 transition-colors relative w-9 h-9 flex items-center justify-center rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800" aria-label={t(citizenLang, 'notifTitle')} onClick={toggleCitizenNotifications}>
-                  <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/></svg>
-                  {citizenUnreadCount > 0 && <span className="absolute top-0 right-0 w-2 h-2 bg-red-500 rounded-full border-2 border-white"></span>}
+                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/></svg>
+                  {citizenUnreadCount > 0 && <span className="absolute -top-[5px] end-[-5px] min-w-[18px] h-[18px] px-[4px] rounded-full bg-red-500 text-white text-[10px] font-bold leading-none inline-flex items-center justify-center border-[2px] border-white dark:border-slate-900">{citizenUnreadCount > 99 ? '99+' : citizenUnreadCount}</span>}
                 </button>
                 {citizenNotifOpen && (
-                  <div className="absolute top-full right-0 mt-2 w-[min(340px,calc(100vw-24px))] overflow-hidden border border-slate-200 dark:border-slate-700 rounded-2xl bg-white dark:bg-slate-800 shadow-[0_10px_25px_-5px_rgba(0,0,0,0.1)] dark:shadow-[0_10px_25px_-5px_rgba(0,0,0,0.3)] z-80">
+                  <div className="absolute top-full end-0 mt-2 w-[min(340px,calc(100vw-24px))] overflow-hidden border border-slate-200 dark:border-slate-700 rounded-2xl bg-white dark:bg-slate-800 shadow-[0_10px_25px_-5px_rgba(0,0,0,0.1)] dark:shadow-[0_10px_25px_-5px_rgba(0,0,0,0.3)] z-80">
                     <div className="px-4 py-3 border-b border-slate-100 dark:border-slate-700 bg-slate-50 dark:bg-slate-700/50 rounded-t-2xl">
                       <p className="text-[11px] text-slate-400 dark:text-slate-500 font-semibold uppercase tracking-wider mb-1">{t(citizenLang, 'notifDropdownTitle')}</p>
                       <button type="button" className="text-xs font-bold text-emerald-600 cursor-pointer bg-transparent border-none" onClick={markAllCitizenNotificationsRead}>
@@ -578,13 +740,16 @@ export default function CitizenPortal({ lang: initialLang, setLang: setGlobalLan
                         <div className="p-4 text-center text-slate-500 text-sm">{t(citizenLang, 'notifEmptyList')}</div>
                       ) : (
                         <>
-                          {citizenNotifications.map(notif => (
+                          {citizenNotifications.map(notif => {
+                            const translated = translateNotification(notif, citizenLang);
+                            return (
                             <button key={notif.id} type="button" className={`w-full block border-0 border-b border-slate-100 dark:border-slate-700 bg-white dark:bg-slate-800 p-3 rounded-xl text-slate-800 dark:text-slate-200 text-start cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors${notif.is_read ? '' : ' bg-emerald-50/50 dark:bg-emerald-900/20 shadow-[inset_3px_0_0_#10b981]'}`} onClick={() => handleCitizenNotificationClick(notif)}>
-                              <strong className="block text-sm">{notif.titre}</strong>
-                              <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{notif.message}</p>
+                              <strong className="block text-sm">{translated.titre}</strong>
+                              <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{translated.message}</p>
                               <small className="mt-1.5 block text-xs text-slate-400 dark:text-slate-500">{formatRelativeTime(notif.created_at, citizenLang)}</small>
                             </button>
-                          ))}
+                            );
+                          })}
                           {citizenNotifHasMore && (
                             <button type="button" className="w-full border-0 bg-transparent text-emerald-600 cursor-pointer font-bold p-3 text-center text-sm" onClick={loadMoreCitizenNotifications}>
                               {t(citizenLang, 'notifViewAll')}
@@ -605,103 +770,7 @@ export default function CitizenPortal({ lang: initialLang, setLang: setGlobalLan
                 </div>
               </button>
             </div>
-
-            {/* Desktop: full action bar — exactly as original */}
-            <div className="hidden md:flex items-center space-x-5">
-              <div className="relative" ref={notifRef}>
-                <button type="button" className="text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 transition-colors relative" aria-label={t(citizenLang, 'notifTitle')} onClick={toggleCitizenNotifications}>
-                  <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/></svg>
-                  {citizenUnreadCount > 0 && <span className="absolute top-0 right-0 w-2 h-2 bg-red-500 rounded-full border-2 border-white"></span>}
-                </button>
-                {citizenNotifOpen && (
-                  <div className="absolute top-full right-0 w-[min(380px,calc(100vw-32px))] overflow-hidden border border-slate-200 dark:border-slate-700 rounded-2xl bg-white dark:bg-slate-800 shadow-[0_10px_25px_-5px_rgba(0,0,0,0.08)] dark:shadow-[0_10px_25px_-5px_rgba(0,0,0,0.3)] z-80">
-                    <div className="px-5 py-4 border-b border-slate-100 dark:border-slate-700 bg-slate-50 dark:bg-slate-700/50 rounded-t-2xl">
-                      <p className="text-[11px] text-slate-400 dark:text-slate-500 font-semibold uppercase tracking-wider mb-1">{t(citizenLang, 'notifDropdownTitle')}</p>
-                      <button type="button" className="text-xs font-bold text-emerald-600 cursor-pointer bg-transparent border-none" onClick={markAllCitizenNotificationsRead}>
-                        {t(citizenLang, 'notifMarkAllRead')}
-                      </button>
-                    </div>
-                    <div className="p-2">
-                      {citizenNotifLoading ? (
-                        <div className="p-4 text-center text-slate-500 text-sm">{t(citizenLang, 'notifLoading')}</div>
-                      ) : citizenNotifications.length === 0 ? (
-                        <div className="p-4 text-center text-slate-500 text-sm">{t(citizenLang, 'notifEmptyList')}</div>
-                      ) : (
-                        <>
-                          {citizenNotifications.map(notif => (
-                            <button key={notif.id} type="button" className={`w-full block border-0 border-b border-slate-100 dark:border-slate-700 bg-white dark:bg-slate-800 p-3 rounded-xl text-slate-800 dark:text-slate-200 text-start cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors${notif.is_read ? '' : ' bg-emerald-50/50 dark:bg-emerald-900/20 shadow-[inset_3px_0_0_#10b981]'}`} onClick={() => handleCitizenNotificationClick(notif)}>
-                              <strong className="block text-sm">{notif.titre}</strong>
-                              <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{notif.message}</p>
-                              <small className="mt-1.5 block text-xs text-slate-400 dark:text-slate-500">{formatRelativeTime(notif.created_at, citizenLang)}</small>
-                            </button>
-                          ))}
-                          {citizenNotifHasMore && (
-                            <button type="button" className="w-full border-0 bg-transparent text-emerald-600 cursor-pointer font-bold p-3 text-center text-sm" onClick={loadMoreCitizenNotifications}>
-                              {t(citizenLang, 'notifViewAll')}
-                            </button>
-                          )}
-                        </>
-                      )}
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              <div className="flex items-center bg-slate-100 dark:bg-slate-800 rounded-lg p-1 space-x-1">
-                <button className={`px-3 py-1.5 min-h-[32px] text-xs font-semibold rounded-md transition-all ${citizenLang === 'ar' ? 'text-slate-800 dark:text-white bg-white dark:bg-slate-600 shadow-sm' : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-white'}`} onClick={() => { if (citizenLang !== 'ar') handleLangToggle(); }}>AR</button>
-                <button className={`px-3 py-1.5 min-h-[32px] text-xs font-semibold rounded-md transition-all ${citizenLang === 'fr' ? 'text-slate-800 dark:text-white bg-white dark:bg-slate-600 shadow-sm' : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-white'}`} onClick={() => { if (citizenLang !== 'fr') handleLangToggle(); }}>FR</button>
-              </div>
-
-              <button
-                type="button"
-                onClick={toggleTheme}
-                className="w-10 h-10 flex items-center justify-center rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 hover:text-slate-800 dark:hover:text-white transition-all"
-                aria-label={theme === 'dark' ? 'Mode clair' : 'Mode sombre'}
-              >
-                {theme === 'dark' ? (
-                  <svg className="w-[18px] h-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
-                ) : (
-                  <svg className="w-[18px] h-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/></svg>
-                )}
-              </button>
-
-              <div className="h-8 w-px bg-slate-200 hidden md:block"></div>
-
-              <div className="relative profile-group cursor-pointer" ref={avatarRef}>
-                <div className="flex items-center space-x-2" onClick={() => setAvatarOpen(!avatarOpen)}>
-                  <div className="w-10 h-10 rounded-full bg-[#10B981] text-white flex items-center justify-center font-bold text-lg shadow-sm">
-                    {(authUser.full_name || authUser.username || 'C')[0].toUpperCase()}
-                  </div>
-                  <svg className={`w-4 h-4 text-slate-400 transition-transform duration-200 ${avatarOpen ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7"/></svg>
-                </div>
-
-                {avatarOpen && (
-                  <div className="absolute right-0 mt-2 w-64 max-w-[calc(100vw-32px)] bg-white dark:bg-slate-800 rounded-2xl shadow-xl border border-slate-100 dark:border-slate-700 py-4 z-50">
-                    <div className="px-5 pb-4 border-b border-slate-100 dark:border-slate-700">
-                      <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 tracking-wider uppercase">Connecté</p>
-                      <p className="text-sm font-bold text-slate-800 dark:text-white mt-1">{authUser.full_name || authUser.username}</p>
-                    </div>
-                    <div className="pt-2">
-                      <button className="w-full flex items-center px-5 py-3 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors group bg-transparent border-none cursor-pointer">
-                        <div className="w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-700 flex items-center justify-center mr-3 text-slate-500 dark:text-slate-400 group-hover:text-slate-700 dark:group-hover:text-white">
-                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
-                        </div>
-                        <span className="text-sm font-medium text-slate-700 dark:text-slate-200">Paramètres</span>
-                      </button>
-                      <button className="w-full flex items-center px-5 py-3 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors group bg-transparent border-none cursor-pointer" onClick={handleLogout}>
-                        <div className="w-8 h-8 rounded-full bg-red-50 dark:bg-red-900/30 flex items-center justify-center mr-3 text-red-500">
-                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/></svg>
-                        </div>
-                        <span className="text-sm font-bold text-red-500">{t(citizenLang, 'deconnexion')}</span>
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-
           </div>
-        </div>
       </header>
 
       {/* Mobile Nav Overlay */}
@@ -709,25 +778,25 @@ export default function CitizenPortal({ lang: initialLang, setLang: setGlobalLan
         <div className="absolute inset-0 bg-black/20 backdrop-blur-sm" onClick={() => setMobileNavOpen(false)}></div>
         <nav className={`relative bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-700 shadow-xl transition-all duration-300 ${mobileNavOpen ? 'translate-y-0 opacity-100' : '-translate-y-4 opacity-0'}`}>
           <div className="px-4 py-3 space-y-1">
-            <button onClick={() => { setPage('dashboard'); setSubmittedNumero(''); setMobileNavOpen(false); }} className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-xl text-sm font-semibold transition-all ${page === 'dashboard' ? 'bg-emerald-50 dark:bg-emerald-900/20 text-[#10B981] shadow-sm' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800'}`}>
+            <button onClick={() => { navigateTo('dashboard'); setSubmittedNumero(''); setMobileNavOpen(false); }} className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-xl text-sm font-semibold transition-all ${page === 'dashboard' ? 'bg-emerald-50 dark:bg-emerald-900/20 text-[#10B981] shadow-sm' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800'}`}>
               <svg className="w-5 h-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}><path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
               {t(citizenLang, 'authGatewayMyRequests')}
             </button>
-            <button onClick={() => { setPage('new'); setSubmittedNumero(''); setLicenceType(null); setMobileNavOpen(false); }} className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-xl text-sm font-semibold transition-all ${page === 'new' ? 'bg-emerald-50 dark:bg-emerald-900/20 text-[#10B981] shadow-sm' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800'}`}>
+            <button onClick={() => { navigateTo('new'); setSubmittedNumero(''); setLicenceType(null); setMobileNavOpen(false); }} className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-xl text-sm font-semibold transition-all ${page === 'new' ? 'bg-emerald-50 dark:bg-emerald-900/20 text-[#10B981] shadow-sm' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800'}`}>
               <svg className="w-5 h-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}><path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4"/></svg>
-              {citizenLang === 'ar' ? 'طلب جديد' : 'Nouvelle demande'}
+              {t(citizenLang, 'authGatewayNewRequest')}
             </button>
-            <button onClick={() => { setPage('contact'); setSubmittedNumero(''); setMobileNavOpen(false); }} className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-xl text-sm font-semibold transition-all ${page === 'contact' ? 'bg-emerald-50 dark:bg-emerald-900/20 text-[#10B981] shadow-sm' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800'}`}>
+            <button onClick={() => { navigateTo('contact'); setSubmittedNumero(''); setMobileNavOpen(false); }} className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-xl text-sm font-semibold transition-all ${page === 'contact' ? 'bg-emerald-50 dark:bg-emerald-900/20 text-[#10B981] shadow-sm' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800'}`}>
               <svg className="w-5 h-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}><path strokeLinecap="round" strokeLinejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
-              Contact
+              {t(citizenLang, 'headerContact')}
             </button>
           </div>
 
           <div className="border-t border-slate-100 dark:border-slate-800 px-4 py-3">
             <div className="flex items-center justify-between">
-              <div className="flex items-center bg-slate-100 dark:bg-slate-800 rounded-lg p-0.5">
-                <button className={`px-3 py-1.5 min-h-[30px] text-[11px] font-semibold rounded-md transition-all ${citizenLang === 'ar' ? 'text-slate-800 dark:text-white bg-white dark:bg-slate-600 shadow-sm' : 'text-slate-500 dark:text-slate-400'}`} onClick={() => { if (citizenLang !== 'ar') handleLangToggle(); }}>AR</button>
-                <button className={`px-3 py-1.5 min-h-[30px] text-[11px] font-semibold rounded-md transition-all ${citizenLang === 'fr' ? 'text-slate-800 dark:text-white bg-white dark:bg-slate-600 shadow-sm' : 'text-slate-500 dark:text-slate-400'}`} onClick={() => { if (citizenLang !== 'fr') handleLangToggle(); }}>FR</button>
+              <div className="flex items-center bg-slate-100 dark:bg-slate-800 rounded-xl p-0.5 shadow-inner">
+                <button className={`px-3 py-1.5 text-[11px] font-bold rounded-lg transition-all ${citizenLang === 'ar' ? 'bg-white dark:bg-slate-600 text-slate-900 dark:text-white shadow-sm' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300'}`} onClick={() => { if (citizenLang !== 'ar') handleLangToggle(); }}>AR</button>
+                <button className={`px-3 py-1.5 text-[11px] font-bold rounded-lg transition-all ${citizenLang === 'fr' ? 'bg-white dark:bg-slate-600 text-slate-900 dark:text-white shadow-sm' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300'}`} onClick={() => { if (citizenLang !== 'fr') handleLangToggle(); }}>FR</button>
               </div>
 
               <button type="button" onClick={toggleTheme} className="w-9 h-9 flex items-center justify-center rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 transition-all" aria-label={theme === 'dark' ? 'Mode clair' : 'Mode sombre'}>
@@ -740,12 +809,12 @@ export default function CitizenPortal({ lang: initialLang, setLang: setGlobalLan
             </div>
 
             <div className="flex items-center gap-3 mt-3 pt-3 border-t border-slate-100 dark:border-slate-800">
-              <div className="w-9 h-9 rounded-full bg-[#10B981] text-white flex items-center justify-center font-bold text-sm shrink-0">
+              <div className="w-9 h-9 rounded-full bg-emerald-500 text-white flex items-center justify-center font-bold text-sm shrink-0">
                 {(authUser.full_name || authUser.username || 'C')[0].toUpperCase()}
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-bold text-slate-800 dark:text-white truncate">{authUser.full_name || authUser.username}</p>
-                <p className="text-[10px] text-slate-400 dark:text-slate-500 font-medium uppercase tracking-wider">Citoyen</p>
+                <p className="text-[10px] text-slate-400 dark:text-slate-500 font-medium uppercase tracking-wider">{t(citizenLang, 'citizen')}</p>
               </div>
               <button onClick={handleLogout} className="w-9 h-9 flex items-center justify-center rounded-lg bg-red-50 dark:bg-red-900/20 text-red-500 hover:bg-red-100 dark:hover:bg-red-900/30 transition-colors shrink-0">
                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/></svg>
@@ -766,7 +835,7 @@ export default function CitizenPortal({ lang: initialLang, setLang: setGlobalLan
                   : 'Suivez l\'état d\'avancement de vos dossiers, complétez vos documents et téléchargez vos licences en un seul endroit.'}</p>
               </div>
               <div className="mt-4 md:mt-0 md:ml-4">
-                <button onClick={() => { setPage('new'); setSubmittedNumero(''); setLicenceType(null); }} className="inline-flex items-center px-6 py-3.5 border border-transparent rounded-xl shadow-lg shadow-emerald-500/30 text-sm font-semibold text-white bg-[#10B981] hover:bg-[#059669] transition-all transform hover:-translate-y-0.5">
+                <button onClick={() => { navigateTo('new'); setSubmittedNumero(''); setLicenceType(null); }} className="inline-flex items-center px-6 py-3.5 border border-transparent rounded-xl shadow-lg shadow-emerald-500/30 text-sm font-semibold text-white bg-[#10B981] hover:bg-[#059669] transition-all transform hover:-translate-y-0.5">
                   <svg className="-ml-1 mr-2 h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v16m8-8H4"/></svg>
                   {t(citizenLang, 'authGatewayNewRequestBtn')}
                 </button>
@@ -775,38 +844,36 @@ export default function CitizenPortal({ lang: initialLang, setLang: setGlobalLan
 
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-5 mb-6 sm:mb-10">
               <div className="bg-white dark:bg-slate-800 p-4 sm:p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm flex flex-col items-center text-center transition-shadow hover:shadow-md">
-                <div className="p-2.5 sm:p-2.5 bg-slate-50 dark:bg-slate-700 rounded-xl text-slate-500 dark:text-slate-400 mb-3">
-                  <svg className="w-5 h-5 sm:w-5 sm:h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+                <div className="p-2.5 bg-slate-50 dark:bg-slate-700 rounded-xl text-slate-500 dark:text-slate-400 mb-3">
+                  <FolderOpen className="w-5 h-5" />
                 </div>
                 <p className="text-[10px] sm:text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-1.5">{citizenLang === 'ar' ? 'إجمالي الطلبات' : 'Total Déposées'}</p>
                 <h3 className="text-2xl sm:text-3xl font-black text-slate-800 dark:text-white leading-none">{loading ? '...' : demandes.length}</h3>
               </div>
               <div className="bg-white dark:bg-slate-800 p-4 sm:p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm flex flex-col items-center text-center transition-shadow hover:shadow-md">
-                <div className="p-2.5 sm:p-2.5 bg-blue-50 dark:bg-blue-900/30 rounded-xl text-blue-500 mb-3">
-                  <svg className="w-5 h-5 sm:w-5 sm:h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                <div className="p-2.5 bg-blue-50 dark:bg-blue-900/30 rounded-xl text-blue-500 mb-3">
+                  <Clock className="w-5 h-5" />
                 </div>
                 <p className="text-[10px] sm:text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-1.5">{citizenLang === 'ar' ? 'في المعالجة' : 'En cours d\'étude'}</p>
                 <h3 className="text-2xl sm:text-3xl font-black text-slate-800 dark:text-white leading-none">{loading ? '...' : demandes.filter(d => !['accepte', 'refuse'].includes(d.statut)).length}</h3>
               </div>
               <div className="bg-white dark:bg-slate-800 p-4 sm:p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm flex flex-col items-center text-center transition-shadow hover:shadow-md">
-                <div>
-                  {(() => {
-                    const corrigerCount = demandes.filter(d => ['fichier_rejete', 'documents_rejetes'].includes(d.statut)).length;
-                    return (
-                      <>
-                        <div className={`p-2.5 sm:p-2.5 rounded-xl inline-block mb-3 ${corrigerCount > 0 ? 'bg-amber-50 dark:bg-amber-900/30 text-amber-500' : 'bg-slate-50 dark:bg-slate-700 text-slate-400 dark:text-slate-500'}`}>
-                          <svg className="w-5 h-5 sm:w-5 sm:h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
-                        </div>
-                        <p className="text-[10px] sm:text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-1.5">{citizenLang === 'ar' ? 'تتطلب تصحيحا' : 'À corriger'}</p>
-                      </>
-                    );
-                  })()}
-                </div>
+                {(() => {
+                  const corrigerCount = demandes.filter(d => ['fichier_rejete', 'documents_rejetes'].includes(d.statut)).length;
+                  return (
+                    <>
+                      <div className={`p-2.5 rounded-xl inline-block mb-3 ${corrigerCount > 0 ? 'bg-amber-50 dark:bg-amber-900/30 text-amber-500' : 'bg-slate-50 dark:bg-slate-700 text-slate-400 dark:text-slate-500'}`}>
+                        <AlertTriangle className="w-5 h-5" />
+                      </div>
+                      <p className="text-[10px] sm:text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-1.5">{citizenLang === 'ar' ? 'تتطلب تصحيحا' : 'À corriger'}</p>
+                    </>
+                  );
+                })()}
                 <h3 className="text-2xl sm:text-3xl font-black text-slate-800 dark:text-white leading-none">{loading ? '...' : demandes.filter(d => ['fichier_rejete', 'documents_rejetes'].includes(d.statut)).length}</h3>
               </div>
               <div className="bg-white dark:bg-slate-800 p-4 sm:p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm flex flex-col items-center text-center transition-shadow hover:shadow-md">
-                <div className="p-2.5 sm:p-2.5 bg-emerald-50 dark:bg-emerald-900/30 rounded-xl text-[#10B981] mb-3">
-                  <svg className="w-5 h-5 sm:w-5 sm:h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                <div className="p-2.5 bg-emerald-50 dark:bg-emerald-900/30 rounded-xl text-[#10B981] mb-3">
+                  <CheckCircle2 className="w-5 h-5" />
                 </div>
                 <p className="text-[10px] sm:text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-1.5">{citizenLang === 'ar' ? 'طلبات مقبولة' : 'Acceptées'}</p>
                 <h3 className="text-2xl sm:text-3xl font-black text-slate-800 dark:text-white leading-none">{loading ? '...' : demandes.filter(d => d.statut === 'accepte').length}</h3>
@@ -817,7 +884,7 @@ export default function CitizenPortal({ lang: initialLang, setLang: setGlobalLan
               <div className="p-5 sm:p-6">
                 <div className="flex items-center gap-3 mb-1">
                   <div className="w-9 h-9 rounded-xl bg-[#0F172A] dark:bg-slate-600 flex items-center justify-center shrink-0">
-                    <svg className="w-4.5 h-4.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+                    <Search className="w-4.5 h-4.5 text-white" />
                   </div>
                   <div>
                     <p className="text-sm font-bold text-[#0F172A] dark:text-white">{citizenLang==='ar' ? 'تتبع ملف برقم الملف' : 'Recherche rapide'}</p>
@@ -829,7 +896,7 @@ export default function CitizenPortal({ lang: initialLang, setLang: setGlobalLan
                 <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
                   <div className="flex-1 relative">
                     <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none">
-                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+                      <FileText className="w-4 h-4" />
                     </div>
                     <input
                       value={publicTrackNum}
@@ -842,12 +909,12 @@ export default function CitizenPortal({ lang: initialLang, setLang: setGlobalLan
                   <button
                     onClick={handlePublicTrack}
                     disabled={publicTrackLoading || !publicTrackNum.trim()}
-                    className="inline-flex items-center justify-center gap-2 bg-[#0F172A] dark:bg-slate-700 hover:bg-slate-800 dark:hover:bg-slate-600 disabled:bg-slate-300 dark:disabled:bg-slate-600 disabled:cursor-not-allowed text-white text-sm font-semibold px-7 py-3 rounded-xl transition-all shrink-0"
+                    className="inline-flex items-center justify-center gap-2 bg-[#10B981] hover:bg-[#059669] disabled:bg-slate-300 dark:disabled:bg-slate-600 disabled:cursor-not-allowed text-white text-sm font-semibold px-7 py-3 rounded-xl transition-all shrink-0 shadow-md hover:shadow-lg"
                   >
                     {publicTrackLoading ? (
                       <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                     ) : (
-                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+                      <Search className="w-4 h-4" />
                     )}
                     {citizenLang==='ar' ? 'بحث' : 'Chercher'}
                   </button>
@@ -927,7 +994,7 @@ export default function CitizenPortal({ lang: initialLang, setLang: setGlobalLan
                 </svg>
                 <h2 className="text-slate-700 dark:text-slate-200 text-base font-semibold mb-1.5 mt-4">{t(citizenLang, 'authGatewayEmptyTitle')}</h2>
                 <p className="text-slate-500 dark:text-slate-400 text-sm mb-5 max-w-[400px] mx-auto">{t(citizenLang, 'authGatewayEmptyDesc')}</p>
-                <button className="inline-flex items-center px-6 py-3 border border-transparent rounded-xl shadow-lg shadow-emerald-500/30 text-sm font-semibold text-white bg-[#10B981] hover:bg-[#059669] transition-all transform hover:-translate-y-0.5" onClick={() => { setPage('new'); setLicenceType(null); }}>{t(citizenLang, 'authGatewayEmptyBtn')}</button>
+                <button className="inline-flex items-center px-6 py-3 border border-transparent rounded-xl shadow-lg shadow-emerald-500/30 text-sm font-semibold text-white bg-[#10B981] hover:bg-[#059669] transition-all transform hover:-translate-y-0.5" onClick={() => { navigateTo('new'); setLicenceType(null); }}>{t(citizenLang, 'authGatewayEmptyBtn')}</button>
               </div>
             ) : (
               <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
@@ -938,7 +1005,8 @@ export default function CitizenPortal({ lang: initialLang, setLang: setGlobalLan
                     lang={citizenLang}
                     onTrack={() => openTrack(demande)}
                     onCorrect={() => openCorrection(demande)}
-                    onNewRequest={() => { setPage('new'); setSubmittedNumero(''); setLicenceType(null); }}
+                    onNewRequest={() => { navigateTo('new'); setSubmittedNumero(''); setLicenceType(null); }}
+                    onCancel={handleCancelDemande}
                   />
                 ))}
               </div>
@@ -1016,7 +1084,7 @@ export default function CitizenPortal({ lang: initialLang, setLang: setGlobalLan
               </div>
               <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
                 <button
-                  onClick={() => { setPage('track'); }}
+                  onClick={() => { navigateTo('track', { numero: submittedNumero }); }}
                   className="inline-flex items-center px-6 py-3 rounded-xl text-sm font-semibold text-white bg-[#10B981] hover:bg-[#059669] transition-all shadow-md hover:shadow-lg"
                 >
                   <svg className="w-4 h-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -1026,7 +1094,7 @@ export default function CitizenPortal({ lang: initialLang, setLang: setGlobalLan
                   {citizenLang === 'ar' ? 'تتبع الملف' : 'Suivre ma demande'}
                 </button>
                 <button
-                  onClick={() => { setPage('dashboard'); setSubmittedNumero(''); }}
+                  onClick={() => { navigateTo('dashboard'); setSubmittedNumero(''); }}
                   className="inline-flex items-center px-6 py-3 rounded-xl text-sm font-semibold text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 transition-all"
                 >
                   {citizenLang === 'ar' ? 'العودة للوحة التحكم' : 'Retour au tableau de bord'}
@@ -1152,12 +1220,73 @@ export default function CitizenPortal({ lang: initialLang, setLang: setGlobalLan
               canDelete={false}
               isRtl={isRtl}
             />
+
+            {['en_cours_analyse', 'documents_rejetes', 'documents_corriges', 'avis_favorable'].includes(selectedDemande.statut) && (
+              <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm p-5 sm:p-6">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                  <div>
+                    <p className="text-sm font-bold text-slate-800 dark:text-white">{t(citizenLang, 'cancelRequest')}</p>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">{t(citizenLang, 'cancelRequestTrackDesc')}</p>
+                  </div>
+                  <button
+                    type="button"
+                    className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold border border-red-300 dark:border-red-700 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors shrink-0"
+                    onClick={() => setCancelConfirmId(selectedDemande.id)}
+                  >
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+                    {t(citizenLang, 'cancelRequest')}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {cancelConfirmId === selectedDemande.id && (
+              <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={() => setCancelConfirmId(null)}>
+                <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-700 p-6 max-w-sm mx-4" onClick={e => e.stopPropagation()}>
+                  <div className="flex items-center gap-3 mb-4">
+                    <div className="w-10 h-10 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center shrink-0">
+                      <svg className="w-5 h-5 text-red-600 dark:text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z"/></svg>
+                    </div>
+                    <h3 className="text-base font-bold text-slate-800 dark:text-white">{t(citizenLang, 'cancelRequest')}</h3>
+                  </div>
+                  <p className="text-sm text-slate-600 dark:text-slate-400 mb-6">{t(citizenLang, 'cancelRequestConfirm')}</p>
+                  <div className="flex gap-3">
+                    <button
+                      type="button"
+                      className="flex-1 py-2.5 px-4 rounded-xl text-sm font-semibold bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors"
+                      onClick={() => setCancelConfirmId(null)}
+                    >
+                      {t(citizenLang, 'cancel')}
+                    </button>
+                    <button
+                      type="button"
+                      disabled={cancelLoading}
+                      className="flex-1 py-2.5 px-4 rounded-xl text-sm font-semibold bg-red-600 text-white hover:bg-red-700 transition-colors disabled:opacity-50"
+                      onClick={async () => {
+                        setCancelLoading(true);
+                        try {
+                          await handleCancelDemande(selectedDemande.id);
+                          setCancelConfirmId(null);
+                          navigateTo('dashboard');
+                        } catch {
+                          // error handled in handleCancelDemande
+                        } finally {
+                          setCancelLoading(false);
+                        }
+                      }}
+                    >
+                      {cancelLoading ? '...' : t(citizenLang, 'cancelRequestConfirmBtn')}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
           </section>
         )}
 
         {page === 'correct' && selectedDemande && (
           <section className="flex flex-col gap-6 max-w-[1040px] mx-auto px-4 sm:px-6">
-            <button className="flex items-center gap-[7px] bg-transparent border-0 text-accent-500 cursor-pointer font-extrabold w-fit" type="button" onClick={() => setPage('track')}>
+            <button className="flex items-center gap-[7px] bg-transparent border-0 text-accent-500 cursor-pointer font-extrabold w-fit" type="button" onClick={() => navigateTo('track', { numero: selectedDemande?.numero_dossier })}>
               <ArrowLeft className="h-4 w-4" />
               {t(citizenLang, 'authGatewayCorrectBack')}
             </button>
@@ -1275,6 +1404,8 @@ export default function CitizenPortal({ lang: initialLang, setLang: setGlobalLan
           </section>
         )}
       </main>
+
+      <CitizenAiChat lang={citizenLang} authUser={authUser} />
     </div>
   );
 }

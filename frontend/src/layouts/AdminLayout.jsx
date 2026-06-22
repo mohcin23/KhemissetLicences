@@ -29,7 +29,6 @@ const NAV_GROUP_DEFS = [
 const ROLE_LABELS = {
   admin: { fr: 'Administrateur', ar: 'مدير' },
   agent: { fr: 'Agent', ar: 'عون' },
-  lecteur: { fr: 'Lecteur', ar: 'قارئ' },
   citizen: { fr: 'Citoyen', ar: 'مواطن' },
 };
 

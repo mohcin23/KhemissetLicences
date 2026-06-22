@@ -44,8 +44,8 @@ export const STATUS_CONFIG = {
     bg: '#eff6ff',
     border: '#60a5fa',
     icon: '👍',
-    label_ar: 'وثائق مvalidée',
-    label_fr: 'Documents validés'
+    label_ar: 'تم التصديق مؤقتاً',
+    label_fr: 'Validé provisoirement'
   },
   decision_imprimee: {
     color: '#1e3a8a',
@@ -79,6 +79,14 @@ export const STATUS_CONFIG = {
     label_ar: 'مؤرشف',
     label_fr: 'Archivé'
   },
+  annule: {
+    color: '#6b7280',
+    bg: '#f3f4f6',
+    border: '#9ca3af',
+    icon: '🚫',
+    label_ar: 'ملغي من طرف المواطن',
+    label_fr: 'Annulé par le citoyen'
+  },
 
   // ── Anciens codes (rétrocompatibilité affichage uniquement) ─────────────────
   brouillon:            { color: '#475569', bg: '#f1f5f9', border: '#94a3b8', icon: '📝', label_ar: 'مسودة',       label_fr: 'Brouillon (ancien)' },
@@ -91,7 +99,7 @@ export const STATUS_CONFIG = {
   avis_defavorable:     { color: '#7c3aed', bg: '#f5f3ff', border: '#a78bfa', icon: '👎', label_ar: 'رأي سلبي (الموظف)', label_fr: 'Avis défavorable (ancien)' },
 };
 
-export const TERMINAL_STATUTS = new Set(['accepte', 'refuse', 'archive']);
+export const TERMINAL_STATUTS = new Set(['accepte', 'refuse', 'archive', 'annule']);
 
 /**
  * Retourne le libellé localisé d'un statut.

@@ -1,25 +1,29 @@
 import React from 'react';
 import { Search, X } from 'lucide-react';
+import { t } from '../../i18n/translations';
 
 export default function FilterBar({
   children,
+  lang = 'fr',
   searchValue,
   onSearchChange,
-  searchPlaceholder = 'Rechercher...',
+  searchPlaceholder,
   total,
-  totalLabel = 'résultats',
+  totalLabel,
   hasActiveFilters = false,
   onClearFilters,
   className = '',
 }) {
+  const placeholder = searchPlaceholder || t(lang, 'filterBarSearchPlaceholder');
+  const label = totalLabel || t(lang, 'filterBarResultsLabel');
   return (
     <div className={`bg-white border border-neutral-200 rounded-xl shadow-card overflow-hidden ${className}`}>
       <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-neutral-100">
         <div>
-          <h3 className="text-sm font-bold text-neutral-900">Recherche et filtres</h3>
+          <h3 className="text-sm font-bold text-neutral-900">{t(lang, 'filterBarTitle')}</h3>
           {total != null && (
             <p className="mt-0.5 text-xs text-neutral-500">
-              {total} {totalLabel}
+              {total} {label}
             </p>
           )}
         </div>
@@ -30,7 +34,7 @@ export default function FilterBar({
             className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-neutral-600 rounded-lg hover:bg-neutral-100 transition-colors cursor-pointer"
           >
             <X className="h-3.5 w-3.5" />
-            Effacer
+            {t(lang, 'filterBarClear')}
           </button>
         )}
       </div>
@@ -45,14 +49,14 @@ export default function FilterBar({
               className="w-full h-10 pl-9 pr-3 border border-neutral-200 rounded-lg bg-white text-sm text-neutral-900 placeholder:text-neutral-400 outline-none transition-all duration-150 focus:border-accent-500 focus:ring-2 focus:ring-accent-100 hover:border-neutral-300"
               value={searchValue || ''}
               onChange={(e) => onSearchChange(e.target.value)}
-              placeholder={searchPlaceholder}
+              placeholder={placeholder}
             />
             {searchValue && (
               <button
                 type="button"
                 onClick={() => onSearchChange('')}
                 className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded-md text-neutral-400 hover:text-neutral-600 hover:bg-neutral-100 transition-colors cursor-pointer"
-                aria-label="Effacer la recherche"
+                aria-label={t(lang, 'filterBarClearAria')}
               >
                 <X className="h-3.5 w-3.5" />
               </button>

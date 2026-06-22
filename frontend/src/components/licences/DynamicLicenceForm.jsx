@@ -3,6 +3,7 @@ import { t } from '../../i18n/translations';
 import { ocrAPI } from '../../services/api';
 import ScannerModal from '../ui/ScannerModal';
 import Stepper from './Stepper';
+import { filterByLang } from '../../utils/languageFilter';
 import {
   ArrowLeft,
   ArrowRight,
@@ -53,7 +54,11 @@ const DOC_ICONS = {
 const allFields = (config) => config.sections.flatMap((s) => s.fields);
 const getInitialValue = (field, initialData) => initialData?.[field.name] ?? '';
 const buildFormState = (config, initialData = {}) =>
-  allFields(config).reduce((a, f) => { a[f.name] = getInitialValue(f, initialData); return a; }, {});
+  allFields(config).reduce((a, f) => {
+    a[f.name] = getInitialValue(f, initialData);
+    if (f.arabic) a[`${f.name}_ar`] = initialData?.[`${f.name}_ar`] ?? '';
+    return a;
+  }, {});
 const buildDocsState = (config) =>
   config.documents.reduce((a, d) => { a[d.key] = null; return a; }, {});
 const isEmailValid = (v) => !v || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(v).trim());
@@ -88,24 +93,53 @@ const imageToOcrBase64 = (file) => new Promise((resolve, reject) => {
 });
 
 const OCR_ALIAS_MAP = {
-  nom: ['nom', 'nom_directeur', 'nom_complet'], prenom: ['prenom', 'prenom_directeur', 'nom_complet'],
-  cin: ['cin', 'cin_directeur'], date_naissance: ['date_naissance'],
-  adresse: ['adresse', 'adresse_proprietaire', 'adresse_local'],
-  adresse_complete: ['adresse', 'adresse_local', 'adresse_proprietaire'],
-  adresse_local: ['adresse_local', 'adresse'],
-  specialite: ['specialite', 'diplome_directeur', 'qualification_sportive'],
-  universite: ['universite'], annee: ['annee_obtention'],
-  superficie: ['superficie', 'superficie_totale'], nom_proprietaire: ['nom', 'nom_directeur'],
-  numero_autorisation: ['numero_autorisation'], date_autorisation: ['date_autorisation'],
-  numero_permis: ['numero_autorisation'], date_permis: ['date_autorisation'],
+  nom: ['nom', 'nom_directeur'],
+  prenom: ['prenom', 'prenom_directeur'],
+  nom_ar: ['nom_ar', 'nom_directeur_ar'],
+  prenom_ar: ['prenom_ar', 'prenom_directeur_ar'],
+  cin: ['cin', 'cin_directeur'],
+  date_naissance: ['date_naissance'],
+  adresse: ['adresse_complete', 'adresse', 'adresse_proprietaire'],
+  adresse_ar: ['adresse_complete_ar', 'adresse_ar', 'adresse_proprietaire_ar'],
+  commune: ['commune', 'commune_complete'],
+  commune_ar: ['commune_ar', 'commune_complete_ar'],
+  cercle: ['cercle'],
+  cercle_ar: ['cercle_ar'],
+  adresse_local: ['adresse_local', 'adresse_complete', 'adresse'],
+  adresse_local_ar: ['adresse_local_ar'],
+  specialite: ['diplome', 'specialite', 'qualification_sportive', 'diplome_directeur'],
+  specialite_ar: ['diplome_ar', 'specialite_ar', 'qualification_sportive_ar', 'diplome_directeur_ar'],
+  universite: ['universite'],
+  universite_ar: ['universite_ar'],
+  annee: ['annee_obtention'],
+  superficie: ['superficie', 'superficie_totale'],
+  nom_proprietaire: ['nom_complet', 'nom_proprietaire'],
+  nom_proprietaire_ar: ['nom_complet_ar', 'nom_proprietaire_ar'],
+  numero_autorisation: ['numero_izin', 'numero_autorisation'],
+  date_autorisation: ['date_izin', 'date_autorisation'],
+  numero_permis: ['numero_izin', 'numero_autorisation'],
+  date_permis: ['date_izin', 'date_autorisation'],
 };
 
 const mergeExtractedIntoDynamicForm = (current, extracted) => {
   const next = { ...current };
   Object.entries(extracted || {}).forEach(([k, v]) => {
     if (!v) return;
-    (OCR_ALIAS_MAP[k] || [k]).forEach((t) => { if (t in next && !next[t]) next[t] = v; });
+    const targets = OCR_ALIAS_MAP[k] || [k];
+    targets.forEach((t) => { if (t in next && !next[t]) next[t] = v; });
   });
+  // Combine nom + prenom → nom_complet (French)
+  const nomFr = extracted?.nom || '';
+  const prenomFr = extracted?.prenom || '';
+  if ((nomFr || prenomFr) && 'nom_complet' in next) {
+    next.nom_complet = [prenomFr, nomFr].filter(Boolean).join(' ');
+  }
+  // Combine nom_ar + prenom_ar → nom_complet_ar (Arabic)
+  const nomAr = extracted?.nom_ar || '';
+  const prenomAr = extracted?.prenom_ar || '';
+  if ((nomAr || prenomAr) && 'nom_complet_ar' in next) {
+    next.nom_complet_ar = [prenomAr, nomAr].filter(Boolean).join(' ');
+  }
   return next;
 };
 
@@ -371,11 +405,30 @@ export default function DynamicLicenceForm({
     setDocsStatus((p) => ({ ...p, [doc.key]: { ...p[doc.key], ocrStatus: 'analyzing' } }));
     try {
       const b64 = await imageToOcrBase64(file);
-      const tr = await ocrAPI.extractText(b64, 'image/jpeg');
-      if (!tr.data?.success) throw new Error(tr.data?.message || 'Extraction OCR echouee');
-      const ar = await ocrAPI.analyzeTexts([{ name: labelFor(doc), text: tr.data.text || '', prompt: doc.ocr_prompt }]);
-      if (!ar.data?.success || !ar.data?.extracted) throw new Error('Analyse IA echouee');
-      const ext = ar.data.extracted || {};
+      let ext = {};
+
+      // Step 1: Try direct Pixtral analysis (parseFieldsByType) — sees the image directly
+      try {
+        const direct = await ocrAPI.parseByType(b64, 'image/jpeg', licenceType, doc.key);
+        if (direct.data?.success && direct.data?.extracted && Object.keys(direct.data.extracted).length > 0) {
+          ext = direct.data.extracted;
+        }
+      } catch (directErr) {
+        console.warn('parseByType failed, falling back to 2-step OCR:', directErr.message);
+      }
+
+      // Step 2: Fallback to 2-step OCR (extractText + analyzeTexts) if direct Pixtral gave nothing
+      if (!ext || Object.keys(ext).length === 0) {
+        const tr = await ocrAPI.extractText(b64, 'image/jpeg');
+        if (!tr.data?.success) throw new Error(tr.data?.message || 'Extraction OCR echouee');
+        const ar = await ocrAPI.analyzeTexts(
+          [{ name: labelFor(doc), text: tr.data.text || '', prompt: doc.ocr_prompt }],
+          doc.ocr_fields
+        );
+        if (!ar.data?.success || !ar.data?.extracted) throw new Error('Analyse IA echouee');
+        ext = ar.data.extracted || {};
+      }
+
       setFormData((p) => mergeExtractedIntoDynamicForm(p, ext));
       setDocsStatus((p) => ({ ...p, [doc.key]: { ...p[doc.key], ocrStatus: 'done', extracted: ext } }));
     } catch (err) {
@@ -414,11 +467,43 @@ export default function DynamicLicenceForm({
 
   const renderField = (field) => {
     const err = errors[field.name];
-    if (field.type === 'textarea') return (
-      <div key={field.name} className="col-span-full">
-        <Textarea label={labelFor(field)} required={field.required} value={formData[field.name] || ''} onChange={(e) => updateField(field, e.target.value)} error={err} rows={field.name === 'notes' ? 2 : 3} className="agent-form-field" />
-      </div>
-    );
+    const arKey = `${field.name}_ar`;
+    if (field.type === 'textarea') {
+      if (field.arabic) {
+        return (
+          <div key={field.name} className="col-span-full">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <Textarea
+                label={lang === 'ar' ? field.label_ar : `${field.label_fr} (arabe)`}
+                required={field.required}
+                lang="ar"
+                value={(formData[arKey]) || ''}
+                onChange={(e) => setFormData((p) => ({ ...p, [arKey]: e.target.value }))}
+                error={err}
+                rows={3}
+                className="agent-form-field"
+                style={{ textAlign: 'right' }}
+              />
+              <Textarea
+                label={lang === 'ar' ? `${field.label_ar} (فرنسية)` : field.label_fr}
+                required={field.required}
+                lang="fr"
+                value={(formData[field.name]) || ''}
+                onChange={(e) => updateField(field, e.target.value)}
+                error={err}
+                rows={3}
+                className="agent-form-field"
+              />
+            </div>
+          </div>
+        );
+      }
+      return (
+        <div key={field.name} className="col-span-full">
+          <Textarea label={labelFor(field)} required={field.required} value={(formData[field.name]) || ''} onChange={(e) => updateField(field, e.target.value)} error={err} rows={3} className="agent-form-field" />
+        </div>
+      );
+    }
     if (field.type === 'select') {
       const opts = [{ value: '', label: txt('Sélectionnez...', 'اختر...') }, ...field.options.map((o) => typeof o === 'string' ? { value: o, label: o } : o)];
       return (
@@ -427,6 +512,33 @@ export default function DynamicLicenceForm({
         </div>
       );
     }
+    if (field.arabic) return (
+      <div key={field.name} className="col-span-full sm:col-span-1">
+        <div className="grid grid-cols-2 gap-3">
+          <Input
+            label={lang === 'ar' ? field.label_ar : `${field.label_fr} (arabe)`}
+            required={field.required}
+            type={field.type || 'text'}
+            lang="ar"
+            value={(formData[arKey]) || ''}
+            onChange={(e) => setFormData((p) => ({ ...p, [arKey]: e.target.value }))}
+            error={err}
+            className="agent-form-field"
+            style={{ textAlign: 'right' }}
+          />
+          <Input
+            label={lang === 'ar' ? `${field.label_ar} (فرنسية)` : field.label_fr}
+            required={field.required}
+            type={field.type || 'text'}
+            lang="fr"
+            value={(formData[field.name]) || ''}
+            onChange={(e) => updateField(field, e.target.value)}
+            error={err}
+            className="agent-form-field"
+          />
+        </div>
+      </div>
+    );
     return (
       <div key={field.name} className="col-span-full sm:col-span-1">
         <Input label={labelFor(field)} required={field.required} type={field.type || 'text'} value={formData[field.name] || ''} onChange={(e) => updateField(field, e.target.value)} error={err} className="agent-form-field" />
@@ -510,7 +622,7 @@ export default function DynamicLicenceForm({
                   </button>
                   <button type="button" className="citizen-btn-next" onClick={() => goToStep(3)} disabled={uploadedCount === 0 || smartBusy}>
                     {txt('Voir le récapitulatif', 'مراجعة الإرسال')}
-                    <ArrowRight size={16} />
+                    <ArrowRight size={16} style={lang === 'ar' ? { transform: 'scaleX(-1)' } : undefined} />
                   </button>
                 </div>
               </div>
@@ -552,7 +664,7 @@ export default function DynamicLicenceForm({
                     )}
                     <button type="submit" className="citizen-btn-next">
                       {smartMode ? txt('Voir le récapitulatif', 'مراجعة الإرسال') : txt('Passer aux documents', 'الانتقال إلى الوثائق')}
-                      <ArrowRight size={16} />
+                      <ArrowRight size={16} style={lang === 'ar' ? { transform: 'scaleX(-1)' } : undefined} />
                     </button>
                   </div>
                 </form>
@@ -578,39 +690,111 @@ export default function DynamicLicenceForm({
                 )}
                 <div className="agent-recap-grid">
                   {fields.map((f) => (
-                    <div key={f.name} className="agent-recap-item">
-                      <span className="agent-recap-label">{labelFor(f)}</span>
-                      {f.type === 'select' ? (
-                        <select
-                          className="agent-recap-value agent-recap-editable"
-                          value={formData[f.name] || ''}
-                          onChange={(e) => updateField(f, e.target.value)}
-                          style={{ cursor: 'pointer' }}
-                        >
-                          <option value="">-</option>
-                          {(f.options || []).map((o) => {
-                            const val = typeof o === 'string' ? o : o.value;
-                            const lbl = typeof o === 'string' ? o : (lang === 'ar' ? o.label_ar : o.label_fr);
-                            return <option key={val} value={val}>{lbl}</option>;
-                          })}
-                        </select>
-                      ) : f.type === 'textarea' ? (
-                        <textarea
-                          className="agent-recap-value agent-recap-editable"
-                          value={formData[f.name] || ''}
-                          onChange={(e) => updateField(f, e.target.value)}
-                          rows={2}
-                          style={{ resize: 'vertical' }}
-                        />
+                    <React.Fragment key={f.name}>
+                      {f.arabic ? (
+                        <>
+                          <div className="agent-recap-item">
+                            <span className="agent-recap-label">{lang === 'ar' ? f.label_ar : `${f.label_fr} (arabe)`}</span>
+                            {f.type === 'select' ? (
+                              <select
+                                className="agent-recap-value agent-recap-editable"
+                                value={(formData[`${f.name}_ar`]) || ''}
+                                onChange={(e) => setFormData((p) => ({ ...p, [`${f.name}_ar`]: e.target.value }))}
+                                style={{ cursor: 'pointer' }}
+                              >
+                                <option value="">-</option>
+                                {(f.options || []).map((o) => {
+                                  const val = typeof o === 'string' ? o : o.value;
+                                  const lbl = typeof o === 'string' ? o : (lang === 'ar' ? o.label_ar : o.label_fr);
+                                  return <option key={val} value={val}>{lbl}</option>;
+                                })}
+                              </select>
+                            ) : f.type === 'textarea' ? (
+                              <textarea
+                                className="agent-recap-value agent-recap-editable"
+                                value={(formData[`${f.name}_ar`]) || ''}
+                                onChange={(e) => {
+                                  const val = filterByLang(e.target.value, 'ar');
+                                  setFormData((p) => ({ ...p, [`${f.name}_ar`]: val }));
+                                }}
+                                rows={2}
+                                style={{ resize: 'vertical', textAlign: 'right' }}
+                              />
+                            ) : (
+                              <input
+                                type={f.type || 'text'}
+                                className="agent-recap-value agent-recap-editable"
+                                value={(formData[`${f.name}_ar`]) || ''}
+                                onChange={(e) => {
+                                  const val = filterByLang(e.target.value, 'ar');
+                                  setFormData((p) => ({ ...p, [`${f.name}_ar`]: val }));
+                                }}
+                                style={{ textAlign: 'right' }}
+                              />
+                            )}
+                          </div>
+                          <div className="agent-recap-item">
+                            <span className="agent-recap-label">{lang === 'ar' ? `${f.label_ar} (فرنسية)` : f.label_fr}</span>
+                            {f.type === 'textarea' ? (
+                              <textarea
+                                className="agent-recap-value agent-recap-editable"
+                                value={(formData[f.name]) || ''}
+                                onChange={(e) => {
+                                  const val = filterByLang(e.target.value, 'fr');
+                                  updateField(f, val);
+                                }}
+                                rows={2}
+                                style={{ resize: 'vertical' }}
+                              />
+                            ) : (
+                              <input
+                                type={f.type || 'text'}
+                                className="agent-recap-value agent-recap-editable"
+                                value={(formData[f.name]) || ''}
+                                onChange={(e) => {
+                                  const val = filterByLang(e.target.value, 'fr');
+                                  updateField(f, val);
+                                }}
+                              />
+                            )}
+                          </div>
+                        </>
                       ) : (
-                        <input
-                          type={f.type || 'text'}
-                          className="agent-recap-value agent-recap-editable"
-                          value={formData[f.name] || ''}
-                          onChange={(e) => updateField(f, e.target.value)}
-                        />
+                        <div className="agent-recap-item">
+                          <span className="agent-recap-label">{labelFor(f)}</span>
+                          {f.type === 'select' ? (
+                            <select
+                              className="agent-recap-value agent-recap-editable"
+                              value={formData[f.name] || ''}
+                              onChange={(e) => updateField(f, e.target.value)}
+                              style={{ cursor: 'pointer' }}
+                            >
+                              <option value="">-</option>
+                              {(f.options || []).map((o) => {
+                                const val = typeof o === 'string' ? o : o.value;
+                                const lbl = typeof o === 'string' ? o : (lang === 'ar' ? o.label_ar : o.label_fr);
+                                return <option key={val} value={val}>{lbl}</option>;
+                              })}
+                            </select>
+                          ) : f.type === 'textarea' ? (
+                            <textarea
+                              className="agent-recap-value agent-recap-editable"
+                              value={formData[f.name] || ''}
+                              onChange={(e) => updateField(f, e.target.value)}
+                              rows={2}
+                              style={{ resize: 'vertical' }}
+                            />
+                          ) : (
+                            <input
+                              type={f.type || 'text'}
+                              className="agent-recap-value agent-recap-editable"
+                              value={formData[f.name] || ''}
+                              onChange={(e) => updateField(f, e.target.value)}
+                            />
+                          )}
+                        </div>
                       )}
-                    </div>
+                    </React.Fragment>
                   ))}
                 </div>
                 <div style={{ marginTop: 18 }}>

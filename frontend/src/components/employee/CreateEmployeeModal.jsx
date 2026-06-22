@@ -6,14 +6,14 @@ import { useToast } from '../../contexts/ToastContext';
 
 export default function CreateEmployeeModal({ show, onClose, onCreated, lang, isRtl }) {
   const { showToast } = useToast();
-  const [form, setForm] = useState({ full_name: '', username: '', password: '', role: 'agent' });
+  const [form, setForm] = useState({ full_name: '', email: '', password: '', role: 'agent' });
   const [passwordVisible, setPasswordVisible] = useState(false);
   const [loading, setLoading] = useState(false);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    const { full_name, username, password } = form;
-    if (!full_name.trim() || !username.trim() || !password) {
+    const { full_name, email, password } = form;
+    if (!full_name.trim() || !email.trim() || !password) {
       showToast(t(lang, 'adminCreateRequired'), 'error');
       return;
     }
@@ -23,10 +23,10 @@ export default function CreateEmployeeModal({ show, onClose, onCreated, lang, is
     }
     setLoading(true);
     try {
-      await adminAPI.createEmployee({ ...form, full_name: full_name.trim(), username: username.trim() });
+      await adminAPI.createEmployee({ ...form, full_name: full_name.trim(), email: email.trim() });
       showToast(t(lang, 'adminCreateSuccess'));
       onClose();
-      setForm({ full_name: '', username: '', password: '', role: 'agent' });
+      setForm({ full_name: '', email: '', password: '', role: 'agent' });
       onCreated();
     } catch (err) {
       showToast(err.response?.data?.message || t(lang, 'toastError'), 'error');
@@ -56,8 +56,8 @@ export default function CreateEmployeeModal({ show, onClose, onCreated, lang, is
               <input className={inp} value={form.full_name} onChange={e => setForm(p => ({ ...p, full_name: e.target.value }))} placeholder={t(lang, 'adminCreateNamePlaceholder')} required />
             </div>
             <div className="flex flex-col gap-1.5">
-              <label>{t(lang, 'adminCreateUsernameLabel')} *</label>
-              <input className={inp} value={form.username} onChange={e => setForm(p => ({ ...p, username: e.target.value }))} placeholder={t(lang, 'adminCreateUsernamePlaceholder')} required />
+              <label>{t(lang, 'adminCreateEmailLabel')} *</label>
+              <input className={inp} type="email" value={form.email} onChange={e => setForm(p => ({ ...p, email: e.target.value }))} placeholder={t(lang, 'adminCreateEmailPlaceholder')} required />
             </div>
             <div className="flex flex-col gap-1.5">
               <label>{t(lang, 'adminCreatePasswordLabel')} *</label>
@@ -73,7 +73,6 @@ export default function CreateEmployeeModal({ show, onClose, onCreated, lang, is
               <label>{t(lang, 'adminCreateRoleLabel')}</label>
               <select className="min-h-[40px] border border-[#d9e1e7] rounded-lg bg-white text-[#172033] text-sm px-3 py-2.5 outline-none cursor-pointer" value={form.role} onChange={e => setForm(p => ({ ...p, role: e.target.value }))}>
                 <option value="agent">{t(lang, 'roleAgent')}</option>
-                <option value="lecteur">{t(lang, 'roleLecteur')}</option>
               </select>
             </div>
           </div>

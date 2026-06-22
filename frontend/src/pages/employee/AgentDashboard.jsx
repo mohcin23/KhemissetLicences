@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { demandesAPI, pdfAPI } from '../../services/api';
 import { STATUS_CONFIG } from '../../utils/workflowStatusConfig';
+import { t } from '../../i18n/translations';
 import { LanguagePickerModal } from '../../components/ui';
 import {
   AlertTriangle,
@@ -17,6 +18,7 @@ import {
 } from 'lucide-react';
 
 const DECISION_PDF_STATUSES = new Set([
+  'en_cours_analyse',
   'avis_favorable',
   'decision_imprimee',
 ]);
@@ -31,19 +33,29 @@ const formatDate = (date, lang = 'fr') => {
   return new Date(date).toLocaleDateString(lang === 'ar' ? 'ar-MA' : 'fr-FR');
 };
 
+const formatLongDate = (date, lang = 'fr') => {
+  if (!date) return '';
+  return new Date(date).toLocaleDateString(lang === 'ar' ? 'ar-MA' : 'fr-FR', {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+  });
+};
+
 const normalizeNumber = (value) => Number(value || 0);
 
 const STATUS_BADGE_MAP = [
-  { match: /attente.*signature/i, label: 'En attente signature', bg: '#FEF3C7', color: '#D97706', darkBg: '#78350f', darkColor: '#fbbf24' },
-  { match: /approuv/i, label: 'Approuvé', bg: '#D1FAE5', color: '#059669', darkBg: '#064e3b', darkColor: '#34d399' },
-  { match: /rejet/i, label: 'Rejeté', bg: '#FEE2E2', color: '#DC2626', darkBg: '#7f1d1d', darkColor: '#f87171' },
-  { match: /cours.*traitement/i, label: 'En traitement', bg: '#DBEAFE', color: '#2563EB', darkBg: '#1e3a5f', darkColor: '#60a5fa' },
-  { match: /décision.*imprimée|decision.*imprimee/i, label: 'Décision imprimée', bg: '#EDE9FE', color: '#7C3AED', darkBg: '#4c1d95', darkColor: '#a78bfa' },
-  { match: /nouveau|déposé|depose/i, label: 'Nouveau', bg: '#F1F5F9', color: '#64748B', darkBg: '#334155', darkColor: '#94a3b8' },
+  { match: /attente.*signature/i, fr: 'statutEnAttenteSignature', ar: 'statutEnAttenteSignature' },
+  { match: /approuv/i, fr: 'statutApprouve', ar: 'statutApprouve' },
+  { match: /rejet/i, fr: 'statutRejete', ar: 'statutRejete' },
+  { match: /cours.*traitement/i, fr: 'statutEnTraitement', ar: 'statutEnTraitement' },
+  { match: /décision.*imprimée|decision.*imprimee/i, fr: 'statutDecisionImprimee', ar: 'statutDecisionImprimee' },
+  { match: /nouveau|déposé|depose/i, fr: 'statutNouveau', ar: 'statutNouveau' },
 ];
 
-function StatusBadge({ statusText }) {
-  const found = STATUS_BADGE_MAP.find(s => s.match.test(statusText));
+function StatusBadge({ statusText, lang = 'fr' }) {
+  const found = STATUS_BADGE_MAP.find((s) => s.match.test(statusText));
   if (!found) {
     return (
       <span
@@ -54,13 +66,14 @@ function StatusBadge({ statusText }) {
       </span>
     );
   }
+  const label = t(lang, found[lang] || found.fr);
   return (
     <span
       title={statusText}
-      className="inline-block rounded-full px-2.5 py-0.5 text-xs font-semibold dark:hidden"
-      style={{ background: found.bg, color: found.color, borderRadius: 999 }}
+      className="inline-block rounded-full px-2.5 py-0.5 text-xs font-semibold"
+      style={{ background: '#F1F5F9', color: '#64748B', borderRadius: 999 }}
     >
-      {found.label}
+      {label}
     </span>
   );
 }
@@ -75,6 +88,7 @@ export default function AgentDashboard({ lang = 'fr', isRtl = false }) {
   const [langPickerModal, setLangPickerModal] = useState({ open: false, resolve: null });
   const [error, setError] = useState('');
   const isRtlDir = isRtl || lang === 'ar';
+  const tr = (key) => t(lang, key);
 
   const tableFilter = useMemo(() => ({
     statut: searchParams.get('statut') || '',
@@ -103,7 +117,7 @@ export default function AgentDashboard({ lang = 'fr', isRtl = false }) {
       setStats(dashboardRes.data.data || {});
       setDemandes(demandesRes.data.data || []);
     } catch (err) {
-      setError(err.response?.data?.message || 'Erreur de chargement du tableau de bord');
+      setError(err.response?.data?.message || tr('agentLoadError'));
     } finally {
       setLoading(false);
     }
@@ -142,7 +156,7 @@ export default function AgentDashboard({ lang = 'fr', isRtl = false }) {
     try {
       await pdfAPI.downloadDecision(demande.id, demande.numero_dossier, pdfLang);
     } catch (err) {
-      setError(err.response?.data?.message || 'Erreur pendant la generation du PDF');
+      setError(err.response?.data?.message || tr('agentPdfError'));
     } finally {
       setPdfLoading((prev) => { const next = { ...prev }; delete next[key]; return next; });
     }
@@ -152,16 +166,30 @@ export default function AgentDashboard({ lang = 'fr', isRtl = false }) {
   const attenteCount = normalizeNumber(stats?.dossiers_en_attente ?? stats?.dossiers_rejetes);
   const todayCount = normalizeNumber(stats?.dossiers_traites_aujourdhui);
   const rejectedCount = normalizeNumber(stats?.dossiers_rejetes);
-  const today = new Date().toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+  const today = formatLongDate(new Date(), lang);
+
+  const statCards = [
+    { label: tr('agentStatEnCours'), value: activeCount, icon: ClipboardList, iconColor: '#3B82F6' },
+    { label: tr('agentStatFileAttente'), value: attenteCount, icon: Clock, iconColor: '#F59E0B' },
+    { label: tr('agentStatTraitesToday'), value: todayCount, icon: CheckCircle2, iconColor: '#10B981' },
+    { label: tr('agentStatRejetes'), value: rejectedCount, icon: AlertTriangle, iconColor: '#EF4444' },
+  ];
 
   return (
     <div className={isRtlDir ? 'rtl' : 'ltr'} dir={isRtlDir ? 'rtl' : 'ltr'}>
       {/* Header */}
       <div className="flex items-center justify-between mb-8">
         <div>
-          <div className="text-xs font-bold text-teal-600 dark:text-teal-400 uppercase tracking-wider mb-1">Espace Agent</div>
-          <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Bonjour, <span className="text-teal-600 dark:text-teal-400">{stats?.prenom_agent || 'Agent'}</span></h1>
-          <p className="text-slate-500 dark:text-slate-400 text-sm mt-1">{today} — Vos priorités et dossiers récents</p>
+          <div className="text-xs font-bold text-teal-600 dark:text-teal-400 uppercase tracking-wider mb-1">{tr('agentSpace')}</div>
+          <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">
+            {tr('agentHello')}{' '}
+            <span className="text-teal-600 dark:text-teal-400">
+              {stats?.prenom_agent || tr('agentHelloFallback')}
+            </span>
+          </h1>
+          <p className="text-slate-500 dark:text-slate-400 text-sm mt-1">
+            {today} — {tr('agentSubtitle')}
+          </p>
         </div>
         <button
           onClick={loadDashboard}
@@ -169,7 +197,7 @@ export default function AgentDashboard({ lang = 'fr', isRtl = false }) {
           className="btn-primary text-white px-5 py-2.5 rounded-xl text-sm font-semibold flex items-center gap-2"
         >
           <RefreshCcw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-          Actualiser
+          {tr('agentRefresh')}
         </button>
       </div>
 
@@ -181,12 +209,7 @@ export default function AgentDashboard({ lang = 'fr', isRtl = false }) {
 
       {/* Stats Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 lg:gap-5 mb-8">
-        {[
-          { label: 'En cours', value: activeCount, icon: ClipboardList, iconColor: '#3B82F6' },
-          { label: "File d'attente", value: attenteCount, icon: Clock, iconColor: '#F59E0B' },
-          { label: "Traités aujourd'hui", value: todayCount, icon: CheckCircle2, iconColor: '#10B981' },
-          { label: 'Rejetés', value: rejectedCount, icon: AlertTriangle, iconColor: '#EF4444' },
-        ].map((card) => {
+        {statCards.map((card) => {
           const Icon = card.icon;
           return (
             <div
@@ -218,15 +241,17 @@ export default function AgentDashboard({ lang = 'fr', isRtl = false }) {
           return (
             <div className="flex items-center gap-3 mb-4 bg-emerald-50 dark:bg-emerald-900/20 border-l-4 border-emerald-500 rounded-lg p-3.5 text-sm font-medium text-emerald-800 dark:text-emerald-300">
               <CheckCircle2 className="w-5 h-5 shrink-0 text-emerald-500" />
-              Aucun dossier à traiter — Bonne journée !
+              {tr('agentNoDossierEmpty')}
             </div>
           );
         }
         const isUrgent = dossiers_a_traiter >= 2;
         const Icon = isUrgent ? AlertTriangle : Clock;
         const iconColor = isUrgent ? '#EF4444' : '#F59E0B';
-        const label = dossiers_a_traiter === 1 ? '1 dossier à traiter' : `${dossiers_a_traiter} dossiers à traiter`;
-        const btnLabel = dossiers_a_traiter === 1 ? 'Voir le dossier' : 'Voir les dossiers';
+        const label = dossiers_a_traiter === 1
+          ? tr('agentDossierCountOne')
+          : tr('agentDossierCountMany').replace('{count}', String(dossiers_a_traiter));
+        const btnLabel = dossiers_a_traiter === 1 ? tr('agentVoirDossier') : tr('agentVoirDossiers');
         return (
           <div className={`flex items-center justify-between gap-3 mb-4 rounded-lg p-3.5 ${isUrgent ? 'bg-red-50 dark:bg-red-900/20 border-l-4 border-red-500' : 'bg-amber-50 dark:bg-amber-900/20 border-l-4 border-amber-500'}`}>
             <div className="flex items-center gap-3">
@@ -250,21 +275,21 @@ export default function AgentDashboard({ lang = 'fr', isRtl = false }) {
       <div className="bg-white dark:bg-slate-800 rounded-2xl p-5 border border-slate-100 dark:border-slate-700 mb-6 card-hover">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <h3 className="font-bold text-slate-900 dark:text-slate-100">Actions rapides</h3>
-            <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">Accès direct aux files de travail courantes</p>
+            <h3 className="font-bold text-slate-900 dark:text-slate-100">{tr('agentActionsRapides')}</h3>
+            <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">{tr('agentActionsRapidesSub')}</p>
           </div>
           <div className="flex flex-wrap items-center gap-3">
             <button onClick={() => navigate('/app/new')} className="btn-primary text-white px-5 py-2.5 rounded-xl text-sm font-semibold flex items-center gap-2">
               <FilePlus2 className="w-4 h-4" />
-              Nouveau dossier
+              {tr('agentBtnNouveau')}
             </button>
             <button onClick={() => goToSearch({ statut: 'en_cours_analyse' })} className="px-5 py-2.5 rounded-xl text-sm font-semibold border border-slate-200 dark:border-slate-600 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 flex items-center gap-2 transition">
               <Clock className="w-4 h-4 text-amber-500" />
-              En attente
+              {tr('agentBtnEnAttente')}
             </button>
             <button onClick={() => goToSearch({ statut: 'documents_rejetes' })} className="px-5 py-2.5 rounded-xl text-sm font-semibold border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 flex items-center gap-2 transition">
               <AlertTriangle className="w-4 h-4" />
-              Documents rejetés
+              {tr('agentBtnDocsRejetes')}
             </button>
           </div>
         </div>
@@ -273,8 +298,8 @@ export default function AgentDashboard({ lang = 'fr', isRtl = false }) {
       {/* Recent dossiers */}
       <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-100 dark:border-slate-700 overflow-hidden card-hover">
         <div className="p-5 border-b border-slate-100 dark:border-slate-700">
-          <h3 className="font-bold text-slate-900 dark:text-slate-100">Dossiers récents</h3>
-          <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">Tri par dernière modification — 10 dossiers maximum</p>
+          <h3 className="font-bold text-slate-900 dark:text-slate-100">{tr('agentRecent')}</h3>
+          <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">{tr('agentRecentSub')}</p>
         </div>
 
         {loading ? (
@@ -284,19 +309,19 @@ export default function AgentDashboard({ lang = 'fr', isRtl = false }) {
         ) : demandes.length === 0 ? (
           <div className="flex flex-col items-center justify-center px-6 py-12 text-center text-slate-500 dark:text-slate-400">
             <Inbox className="mb-3 w-10 h-10" />
-            <p className="font-semibold text-slate-700 dark:text-slate-200">Aucun dossier trouvé</p>
-            <p className="mt-1 text-sm">Les nouveaux dossiers apparaîtront ici dès leur mise à jour.</p>
+            <p className="font-semibold text-slate-700 dark:text-slate-200">{tr('agentEmptyTitle')}</p>
+            <p className="mt-1 text-sm">{tr('agentEmptySub')}</p>
           </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead>
                 <tr className="border-b border-slate-100 dark:border-slate-700">
-                  <th className="text-left px-5 py-3 text-slate-500 dark:text-slate-400 text-xs font-bold uppercase tracking-wider">N° Dossier</th>
-                  <th className="text-left px-5 py-3 text-slate-500 dark:text-slate-400 text-xs font-bold uppercase tracking-wider">Demandeur</th>
-                  <th className="text-left px-5 py-3 text-slate-500 dark:text-slate-400 text-xs font-bold uppercase tracking-wider">Statut</th>
-                  <th className="text-left px-5 py-3 text-slate-500 dark:text-slate-400 text-xs font-bold uppercase tracking-wider">Date</th>
-                  <th className="text-right px-5 py-3 text-slate-500 dark:text-slate-400 text-xs font-bold uppercase tracking-wider">Actions</th>
+                  <th className="text-left px-5 py-3 text-slate-500 dark:text-slate-400 text-xs font-bold uppercase tracking-wider">{tr('agentThDossier')}</th>
+                  <th className="text-left px-5 py-3 text-slate-500 dark:text-slate-400 text-xs font-bold uppercase tracking-wider">{tr('agentThDemandeur')}</th>
+                  <th className="text-left px-5 py-3 text-slate-500 dark:text-slate-400 text-xs font-bold uppercase tracking-wider">{tr('agentThStatut')}</th>
+                  <th className="text-left px-5 py-3 text-slate-500 dark:text-slate-400 text-xs font-bold uppercase tracking-wider">{tr('agentThDate')}</th>
+                  <th className="text-right px-5 py-3 text-slate-500 dark:text-slate-400 text-xs font-bold uppercase tracking-wider">{tr('agentThActions')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -313,7 +338,7 @@ export default function AgentDashboard({ lang = 'fr', isRtl = false }) {
                         <div className="text-xs text-slate-400 dark:text-slate-500">{demande.cin || '-'}</div>
                       </td>
                       <td className="px-5 py-4">
-                        <StatusBadge statusText={isRtlDir ? status.label_ar : status.label_fr} />
+                        <StatusBadge statusText={isRtlDir ? status.label_ar : status.label_fr} lang={lang} />
                       </td>
                       <td className="px-5 py-4 text-sm text-slate-500 dark:text-slate-400">
                         {formatDate(demande.date_modification || demande.date_creation, lang)}
@@ -324,7 +349,7 @@ export default function AgentDashboard({ lang = 'fr', isRtl = false }) {
                           className="px-4 py-1.5 rounded-lg text-xs font-semibold border border-slate-200 dark:border-slate-600 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 inline-flex items-center gap-1.5 transition"
                         >
                           <Eye className="w-3.5 h-3.5" />
-                          Voir
+                          {tr('agentActionVoir')}
                         </button>
                         {canPrint && (
                           <button
@@ -333,7 +358,7 @@ export default function AgentDashboard({ lang = 'fr', isRtl = false }) {
                             className="px-4 py-1.5 rounded-lg text-xs font-semibold bg-teal-50 dark:bg-teal-900/20 text-teal-700 dark:text-teal-400 border border-teal-200 dark:border-teal-800 hover:bg-teal-100 dark:hover:bg-teal-900/40 inline-flex items-center gap-1.5 transition"
                           >
                             <FileText className="w-3.5 h-3.5" />
-                            Imprimer décision
+                            {tr('agentActionImprimer')}
                           </button>
                         )}
                       </td>

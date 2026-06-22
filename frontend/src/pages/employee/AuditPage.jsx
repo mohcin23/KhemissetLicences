@@ -145,15 +145,15 @@ export default function AuditPage() {
           <div className="stat-card-uniform">
             <div className="absolute top-0 left-0 right-0 h-1 rounded-t-xl bg-[#27ab83]" />
             <div className="mt-1">
-              <p className="text-xs font-bold uppercase tracking-wider text-slate-400">Journal</p>
+              <p className="text-xs font-bold uppercase tracking-wider text-slate-400">{t(lang, 'auditJournalLabel')}</p>
               <p className="text-3xl font-bold text-slate-900 mt-1">{auditTotal}</p>
-              <p className="text-xs text-slate-500 mt-1">Opérations trouvées</p>
+              <p className="text-xs text-slate-500 mt-1">{t(lang, 'auditFoundOps')}</p>
             </div>
           </div>
           <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-3">
-            <p className="text-xs font-bold uppercase tracking-wider text-slate-400">Filtres</p>
+            <p className="text-xs font-bold uppercase tracking-wider text-slate-400">{t(lang, 'auditFiltersLabel')}</p>
             <div>
-              <label className="text-xs text-slate-500 mb-1 block">Utilisateur</label>
+              <label className="text-xs text-slate-500 mb-1 block">{t(lang, 'auditUser')}</label>
               <select className="filter-select w-full" value={auditUserFilter} onChange={e => setAuditUserFilter(e.target.value)}>
                 <option value="">{t(lang, 'allUsers')}</option>
                 {auditFilters.users.map(user => (
@@ -162,7 +162,7 @@ export default function AuditPage() {
               </select>
             </div>
             <div>
-              <label className="text-xs text-slate-500 mb-1 block">Type d'action</label>
+              <label className="text-xs text-slate-500 mb-1 block">{t(lang, 'auditActionTypeLabel')}</label>
               <select className="filter-select w-full" value={auditActionFilter} onChange={e => setAuditActionFilter(e.target.value)}>
                 <option value="">{t(lang, 'allActions')}</option>
                 {auditFilters.actions.map(action => (
@@ -172,7 +172,7 @@ export default function AuditPage() {
             </div>
             {(auditUserFilter || auditActionFilter) && (
               <button className="text-xs text-[#27ab83] font-medium" type="button" onClick={() => { setAuditUserFilter(''); setAuditActionFilter(''); }}>
-                {isRtl ? 'مسح الفلاتر' : 'Réinitialiser les filtres'}
+                {t(lang, 'auditClearFilters')}
               </button>
             )}
           </div>
@@ -198,7 +198,7 @@ export default function AuditPage() {
               </select>
               {(auditUserFilter || auditActionFilter) && (
                 <button className="px-4 py-2.5 rounded-xl text-sm font-semibold border border-slate-200 text-slate-700 hover:bg-slate-50 transition" type="button" onClick={() => { setAuditUserFilter(''); setAuditActionFilter(''); }}>
-                  {isRtl ? 'مسح الفلاتر' : 'Effacer les filtres'}
+                  {t(lang, 'auditClearFilters')}
                 </button>
               )}
             </div>

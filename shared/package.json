@@ -1,0 +1,11 @@
+{
+  "name": "khemisset-shared",
+  "version": "1.0.0",
+  "description": "Librairies partagées pour les microservices KhemissetLicences",
+  "main": "index.js",
+  "dependencies": {
+    "jsonwebtoken": "^9.0.3",
+    "pg": "^8.13.0",
+    "ioredis": "^5.4.1"
+  }
+}

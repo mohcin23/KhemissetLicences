@@ -12,8 +12,7 @@ import { Users, UserPlus, Download, Check, X, Search, Clock } from 'lucide-react
 const roleBadges = (lang) => ({
   admin: { label: t(lang, 'roleAdmin'), className: 'role-admin' },
   agent: { label: t(lang, 'roleAgent'), className: 'role-agent' },
-  lecteur: { label: t(lang, 'roleLecteur'), className: 'role-lecteur' },
-  citizen: { label: t(lang, 'citizen'), className: 'role-lecteur' }
+  citizen: { label: t(lang, 'citizen'), className: 'role-agent' }
 });
 
 export default function AdminUsersPage({ onShowConfirm }) {
@@ -27,7 +26,7 @@ export default function AdminUsersPage({ onShowConfirm }) {
   const [userFilters, setUserFilters] = useState({ role: '', is_active: '', search: '' });
   const [agentUsersLoading, setAgentUsersLoading] = useState(false);
   const [showCreateEmployee, setShowCreateEmployee] = useState(false);
-  const [createEmployeeForm, setCreateEmployeeForm] = useState({ full_name: '', username: '', password: '', role: 'agent' });
+  const [createEmployeeForm, setCreateEmployeeForm] = useState({ full_name: '', email: '', password: '', role: 'agent' });
   const [activityUser, setActivityUser] = useState(null);
 
   const fetchAgentUsers = useCallback(async () => {
@@ -86,7 +85,7 @@ export default function AdminUsersPage({ onShowConfirm }) {
     try {
       const ExcelJS = await import('exceljs');
       const rows = allUsers.map(user => ({
-        full_name: user.full_name || '', username: user.username, role: user.role,
+        full_name: user.full_name || '', email: user.email, role: user.role,
         is_active: Number(user.is_active) === 1 ? 'Actif' : 'Inactif',
         created_at: formatDate(user.created_at), approved_by_name: user.approved_by_name || '',
         total_demandes: user.total_demandes || 0
@@ -95,7 +94,7 @@ export default function AdminUsersPage({ onShowConfirm }) {
       const workbook = new ExcelJS.Workbook();
       const worksheet = workbook.addWorksheet(t(lang, 'adminUsersAllTab'));
       worksheet.columns = [
-        { header: 'Nom complet', key: 'full_name' }, { header: 'Username', key: 'username' },
+        { header: 'Nom complet', key: 'full_name' }, { header: 'Email', key: 'email' },
         { header: 'Role', key: 'role' }, { header: 'Statut', key: 'is_active' },
         { header: 'Date creation', key: 'created_at' }, { header: 'Approuve par', key: 'approved_by_name' },
         { header: 'Total demandes', key: 'total_demandes' }
@@ -137,9 +136,9 @@ export default function AdminUsersPage({ onShowConfirm }) {
           <div className="absolute top-0 left-0 right-0 h-1 rounded-t-xl bg-[#d97706]" />
           <div className="flex items-start justify-between mt-1">
             <div>
-              <p className="text-xs font-bold uppercase tracking-wider text-slate-400">En attente</p>
+              <p className="text-xs font-bold uppercase tracking-wider text-slate-400">{t(lang, 'adminUsersPendingLabel')}</p>
               <p className="text-3xl font-bold text-slate-900 mt-1">{pendingAgentsCount}</p>
-              <p className="text-xs text-slate-500 mt-1">Comptes à examiner</p>
+              <p className="text-xs text-slate-500 mt-1">{t(lang, 'adminUsersPendingDesc')}</p>
             </div>
             <div className="w-11 h-11 rounded-full flex items-center justify-center bg-[#d97706]/10">
               <Clock className="w-5 h-5 text-[#d97706]" />
@@ -150,9 +149,9 @@ export default function AdminUsersPage({ onShowConfirm }) {
           <div className="absolute top-0 left-0 right-0 h-1 rounded-t-xl bg-[#2563eb]" />
           <div className="flex items-start justify-between mt-1">
             <div>
-              <p className="text-xs font-bold uppercase tracking-wider text-slate-400">Total</p>
+              <p className="text-xs font-bold uppercase tracking-wider text-slate-400">{t(lang, 'adminUsersTotalLabel')}</p>
               <p className="text-3xl font-bold text-slate-900 mt-1">{usersTotal}</p>
-              <p className="text-xs text-slate-500 mt-1">Comptes enregistrés</p>
+              <p className="text-xs text-slate-500 mt-1">{t(lang, 'adminUsersTotalDesc')}</p>
             </div>
             <div className="w-11 h-11 rounded-full flex items-center justify-center bg-[#2563eb]/10">
               <Users className="w-5 h-5 text-[#2563eb]" />
@@ -163,9 +162,9 @@ export default function AdminUsersPage({ onShowConfirm }) {
           <div className="absolute top-0 left-0 right-0 h-1 rounded-t-xl bg-[#16a34a]" />
           <div className="flex items-start justify-between mt-1">
             <div>
-              <p className="text-xs font-bold uppercase tracking-wider text-slate-400">Agents actifs</p>
+              <p className="text-xs font-bold uppercase tracking-wider text-slate-400">{t(lang, 'adminUsersActiveLabel')}</p>
               <p className="text-3xl font-bold text-slate-900 mt-1">{allUsers.filter(u => Number(u.is_active) === 1 && u.role === 'agent').length}</p>
-              <p className="text-xs text-slate-500 mt-1">Comptes actifs</p>
+              <p className="text-xs text-slate-500 mt-1">{t(lang, 'adminUsersActiveDesc')}</p>
             </div>
             <div className="w-11 h-11 rounded-full flex items-center justify-center bg-[#16a34a]/10">
               <Check className="w-5 h-5 text-[#16a34a]" />
@@ -205,7 +204,6 @@ export default function AdminUsersPage({ onShowConfirm }) {
               <option value="">{t(lang, 'adminUsersFilterRole')}</option>
               <option value="agent">{t(lang, 'roleAgent')}</option>
               <option value="citizen">{t(lang, 'citizen')}</option>
-              <option value="lecteur">{t(lang, 'roleLecteur')}</option>
               <option value="admin">{t(lang, 'roleAdmin')}</option>
             </select>
             <select className="px-4 py-2.5 rounded-xl border border-slate-200 text-sm text-slate-700 bg-white focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition appearance-none cursor-pointer min-w-[150px]" value={userFilters.is_active} onChange={e => setUserFilters(p => ({ ...p, is_active: e.target.value }))}>
@@ -235,7 +233,7 @@ export default function AdminUsersPage({ onShowConfirm }) {
               <thead>
                 <tr className="border-b border-slate-100">
                   <th className="text-left px-5 py-3">{t(lang, 'adminUsersNameCol')}</th>
-                  <th className="text-left px-5 py-3">Username</th>
+                  <th className="text-left px-5 py-3">Email</th>
                   <th className="text-left px-5 py-3">{t(lang, 'adminUsersAllRole')}</th>
                   <th className="text-left px-5 py-3">{t(lang, 'adminUsersDateCol')}</th>
                   <th className="text-right px-5 py-3">{t(lang, 'adminUsersActionsCol')}</th>
@@ -245,7 +243,7 @@ export default function AdminUsersPage({ onShowConfirm }) {
                 {pendingAgents.map(user => (
                   <tr key={user.id} className="table-row border-b border-slate-50">
                     <td className="px-5 py-4 font-semibold text-sm text-slate-800">{user.full_name || '—'}</td>
-                    <td className="px-5 py-4 text-sm text-slate-600">{user.username}</td>
+                    <td className="px-5 py-4 text-sm text-slate-600">{user.email}</td>
                     <td className="px-5 py-4">
                       <span className={`role-badge ${roleBadges(lang)[user.role]?.className || `role-${user.role}`}`}>
                         {roleBadges(lang)[user.role]?.label || user.role}
@@ -292,12 +290,11 @@ export default function AdminUsersPage({ onShowConfirm }) {
                 {allUsers.map(user => (
                   <tr key={user.id} className="table-row border-b border-slate-50">
                     <td className="px-5 py-4 font-semibold text-sm text-slate-800">{user.full_name || '—'}</td>
-                    <td className="px-5 py-4 text-sm text-slate-600">{user.username}</td>
+                    <td className="px-5 py-4 text-sm text-slate-600">{user.email}</td>
                     <td className="px-5 py-4">
                       <select className="px-3 py-1.5 rounded-lg border border-slate-200 text-xs font-semibold text-slate-700 bg-white focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition appearance-none cursor-pointer" value={user.role} onChange={e => handleChangeUserRole(user.id, e.target.value)}>
                         <option value="admin">{t(lang, 'roleAdmin')}</option>
                         <option value="agent">{t(lang, 'roleAgent')}</option>
-                        <option value="lecteur">{t(lang, 'roleLecteur')}</option>
                         <option value="citizen">{t(lang, 'citizen')}</option>
                       </select>
                     </td>
@@ -334,7 +331,7 @@ export default function AdminUsersPage({ onShowConfirm }) {
         </div>
       )}
 
-      <CreateEmployeeModal show={showCreateEmployee} onClose={() => { setShowCreateEmployee(false); setCreateEmployeeForm({ full_name: '', username: '', password: '', role: 'agent' }); }} onCreated={() => { setShowCreateEmployee(false); setCreateEmployeeForm({ full_name: '', username: '', password: '', role: 'agent' }); fetchAgentUsers(); }} lang={lang} isRtl={isRtl} />
+      <CreateEmployeeModal show={showCreateEmployee} onClose={() => { setShowCreateEmployee(false); setCreateEmployeeForm({ full_name: '', email: '', password: '', role: 'agent' }); }} onCreated={() => { setShowCreateEmployee(false); setCreateEmployeeForm({ full_name: '', email: '', password: '', role: 'agent' }); fetchAgentUsers(); }} lang={lang} isRtl={isRtl} />
       <ActivityHistoryModal user={activityUser} onClose={() => setActivityUser(null)} lang={lang} />
     </div>
   );

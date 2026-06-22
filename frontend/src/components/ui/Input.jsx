@@ -1,10 +1,27 @@
-import React, { forwardRef } from 'react';
+import React, { forwardRef, useCallback } from 'react';
+import { filterByLang } from '../../utils/languageFilter';
 
 const Input = forwardRef(function Input(
-  { label, hint, error, className = '', id, wrapperClassName = '', icon: Icon, required, ...rest },
+  { label, hint, error, className = '', id, wrapperClassName = '', icon: Icon, required, lang, onChange, ...rest },
   ref
 ) {
   const inputId = id || rest.name;
+
+  const handleChange = useCallback((e) => {
+    if (!onChange) return;
+    if (lang) {
+      const filtered = filterByLang(e.target.value, lang);
+      if (filtered !== e.target.value) {
+        const nativeInputValueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+        nativeInputValueSetter.call(e.target, filtered);
+        e.target.dispatchEvent(new Event('input', { bubbles: true }));
+      }
+      onChange({ ...e, target: { ...e.target, value: filtered } });
+    } else {
+      onChange(e);
+    }
+  }, [lang, onChange]);
+
   return (
     <label className={`block ${wrapperClassName}`} htmlFor={inputId}>
       {label && (
@@ -23,6 +40,7 @@ const Input = forwardRef(function Input(
           ref={ref}
           id={inputId}
           required={required}
+          onChange={handleChange}
           className={`w-full h-11 ${Icon ? 'pl-10' : 'pl-3.5'} pr-3.5 border rounded-lg bg-white text-sm text-neutral-900 placeholder:text-neutral-400 outline-none transition-all duration-150 ${
             error
               ? 'border-error-500 focus:border-error-500 focus:ring-2 focus:ring-error-100'
@@ -52,7 +70,7 @@ const Input = forwardRef(function Input(
 
 export default Input;
 
-export function Select({ label, hint, error, options = [], className = '', id, wrapperClassName = '', required, ...rest }) {
+export function Select({ label, hint, error, options = [], className = '', id, wrapperClassName = '', required, lang, ...rest }) {
   const selectId = id || rest.name;
   return (
     <label className={`block ${wrapperClassName}`} htmlFor={selectId}>
@@ -88,8 +106,24 @@ export function Select({ label, hint, error, options = [], className = '', id, w
   );
 }
 
-export function Textarea({ label, hint, error, className = '', id, wrapperClassName = '', required, rows = 4, ...rest }) {
+export function Textarea({ label, hint, error, className = '', id, wrapperClassName = '', required, rows = 4, lang, onChange, ...rest }) {
   const textareaId = id || rest.name;
+
+  const handleTextareaChange = useCallback((e) => {
+    if (!onChange) return;
+    if (lang) {
+      const filtered = filterByLang(e.target.value, lang);
+      if (filtered !== e.target.value) {
+        const nativeTextareaValueSetter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value').set;
+        nativeTextareaValueSetter.call(e.target, filtered);
+        e.target.dispatchEvent(new Event('input', { bubbles: true }));
+      }
+      onChange({ ...e, target: { ...e.target, value: filtered } });
+    } else {
+      onChange(e);
+    }
+  }, [lang, onChange]);
+
   return (
     <label className={`block ${wrapperClassName}`} htmlFor={textareaId}>
       {label && (
@@ -102,6 +136,7 @@ export function Textarea({ label, hint, error, className = '', id, wrapperClassN
         id={textareaId}
         rows={rows}
         required={required}
+        onChange={handleTextareaChange}
         className={`w-full px-3.5 py-2.5 border rounded-lg bg-white text-sm text-neutral-900 placeholder:text-neutral-400 outline-none transition-all duration-150 resize-y ${
           error
             ? 'border-error-500 focus:border-error-500 focus:ring-2 focus:ring-error-100'

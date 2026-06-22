@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { authAPI, citizenAPI } from '../../services/api';
 import PublicTrackingResult from '../public/PublicTrackingResult';
 import {
@@ -28,10 +28,27 @@ const copy = {
     register: 'إنشاء حساب',
     trackRequest: 'متابعة طلب',
     username: 'اسم المستخدم',
+    email: 'البريد الإلكتروني',
     password: 'كلمة المرور',
     confirmPassword: 'تأكيد كلمة المرور',
     fullName: 'الاسم الكامل',
     forgotPassword: 'نسيت كلمة المرور؟',
+    forgotPasswordTitle: 'استعادة كلمة المرور',
+    forgotPasswordDesc: 'أدخل البريد الإلكتروني المرتبط بحسابك. سيتم إرسال رمز تحقق.',
+    forgotPasswordSend: 'إرسال الرمز',
+    forgotPasswordSending: 'جاري الإرسال...',
+    forgotPasswordSuccess: 'تم إرسال الرمز. تحقق من بريدك الإلكتروني.',
+    forgotPasswordBack: 'العودة إلى تسجيل الدخول',
+    verifyCodeTitle: 'التحقق من الرمز',
+    verifyCodeDesc: 'أدخل الرمز المكون من 6 أرقام المرسل إلى بريدك الإلكتروني.',
+    verifyCode: 'تحقق من الرمز',
+    verifyCodeLoading: 'جاري التحقق...',
+    verifyCodeSuccess: 'الرمز صحيح. حدد كلمة المرور الجديدة.',
+    resetPasswordTitle: 'كلمة المرور الجديدة',
+    resetPasswordDesc: 'اختر كلمة مرور جديدة لحسابك.',
+    resetPassword: 'تأكيد التغيير',
+    resetPasswordLoading: 'جاري الحفظ...',
+    resetPasswordSuccess: 'تم تغيير كلمة المرور بنجاح. يمكنك تسجيل الدخول.',
     loginLoading: 'جاري تسجيل الدخول...',
     createLoading: 'جاري إنشاء الحساب...',
     trackLoading: 'جاري تتبع الطلب...',
@@ -97,10 +114,27 @@ const copy = {
     register: 'Créer un compte',
     trackRequest: 'Suivre demande',
     username: "Nom d'utilisateur",
+    email: 'Adresse email',
     password: 'Mot de passe',
     confirmPassword: 'Confirmer le mot de passe',
     fullName: 'Nom complet',
     forgotPassword: 'Mot de passe oublié ?',
+    forgotPasswordTitle: 'Récupérer le mot de passe',
+    forgotPasswordDesc: 'Saisissez l\'adresse email associée à votre compte. Un code de vérification vous sera envoyé.',
+    forgotPasswordSend: 'Envoyer le code',
+    forgotPasswordSending: 'Envoi en cours...',
+    forgotPasswordSuccess: 'Code envoyé. Vérifiez votre boîte de réception.',
+    forgotPasswordBack: 'Retour à la connexion',
+    verifyCodeTitle: 'Vérification du code',
+    verifyCodeDesc: 'Saisissez le code à 6 chiffres reçu par email.',
+    verifyCode: 'Vérifier le code',
+    verifyCodeLoading: 'Vérification en cours...',
+    verifyCodeSuccess: 'Code correct. Définissez votre nouveau mot de passe.',
+    resetPasswordTitle: 'Nouveau mot de passe',
+    resetPasswordDesc: 'Choisissez un nouveau mot de passe pour votre compte.',
+    resetPassword: 'Confirmer le changement',
+    resetPasswordLoading: 'Enregistrement...',
+    resetPasswordSuccess: 'Mot de passe modifié avec succès. Vous pouvez maintenant vous connecter.',
     loginLoading: 'Connexion...',
     createLoading: 'Création du compte...',
     trackLoading: 'Recherche...',
@@ -117,7 +151,6 @@ const copy = {
     adminWelcomeSub: 'Réservé aux agents et cadres de la province',
     role: 'Fonction',
     roleAgent: 'Agent',
-    roleReader: 'Lecteur',
     roleAdmin: 'Administrateur',
     submitRegistration: 'Envoyer la demande d\'inscription',
     adminOnly: 'Cet espace est réservé aux employés autorisés uniquement',
@@ -534,6 +567,12 @@ function CitizenLoginPage(props) {
     mode, setMode, loginForm, setLoginForm, citizenRegisterForm, setCitizenRegisterForm,
     publicTrackNumero, setPublicTrackNumero, publicTrackResult, publicTrackError,
     publicTrackLoading, handleLogin, handleCitizenRegister, handlePublicTrack,
+    handleForgotPassword, forgotPasswordEmail, setForgotPasswordEmail,
+    forgotPasswordLoading, forgotPasswordMessage, forgotPasswordError,
+    verifyCodeStep, setVerifyCodeStep, verifyCodeValue, setVerifyCodeValue,
+    verifyCodeLoading, verifyCodeMessage, setVerifyCodeMessage, verifyCodeError, setVerifyCodeError, handleVerifyCode,
+    resetNewPassword, setResetNewPassword, resetConfirmPassword, setResetConfirmPassword,
+    resetPasswordLoading, resetPasswordMessage, resetPasswordError, handleResetPassword,
     onBack, loading, message, error, hasError, visiblePasswords, togglePassword,
     lang, setLang, isRtl, labels,
   } = props;
@@ -588,22 +627,76 @@ function CitizenLoginPage(props) {
 
           {mode === 'login' && (
             <form key="c-login" className="space-y-4" onSubmit={(e) => handleLogin(e, 'citizen')} noValidate>
-              <FormField id="c-u" label={labels.username} icon={User} value={loginForm.username} onChange={e => setLoginForm(p => ({ ...p, username: e.target.value }))} required error={hasError ? ' ' : ''} autoComplete="username" isRtl={isRtl} />
+              <FormField id="c-u" label={labels.email} icon={Mail} value={loginForm.email} onChange={e => setLoginForm(p => ({ ...p, email: e.target.value }))} placeholder="email@exemple.com" required error={hasError ? ' ' : ''} autoComplete="email" isRtl={isRtl} />
               <PasswordField id="c-p" label={labels.password} value={loginForm.password} onChange={e => setLoginForm(p => ({ ...p, password: e.target.value }))} visible={visiblePasswords.login} onToggle={() => togglePassword('login')} error={hasError ? ' ' : ''} autoComplete="current-password" isRtl={isRtl} />
               <button className="w-full h-12 border-none rounded-xl text-sm font-bold text-white cursor-pointer bg-accent-500 hover:bg-accent-600 disabled:opacity-60 disabled:cursor-not-allowed transition-all duration-200 flex items-center justify-center gap-2" type="submit" disabled={loading}>
                 {loading && <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />}
                 {loading ? labels.loginLoading : labels.login}
               </button>
-              <button type="button" className={`block w-full mt-2 text-sm text-accent-600 font-medium cursor-pointer border-none bg-transparent hover:underline ${isRtl ? 'text-left' : 'text-right'}`}>
+              <button type="button" onClick={() => setMode('forgot-password')} className={`block w-full mt-2 text-sm text-accent-600 font-medium cursor-pointer border-none bg-transparent hover:underline ${isRtl ? 'text-left' : 'text-right'}`}>
                 {labels.forgotPassword}
               </button>
+            </form>
+          )}
+
+          {mode === 'forgot-password' && verifyCodeStep === 1 && (
+            <form key="c-forgot" className="space-y-4" onSubmit={handleForgotPassword} noValidate>
+              <div className="rounded-xl border border-accent-200 bg-accent-50 p-4 text-sm font-medium text-accent-800">
+                {labels.forgotPasswordDesc}
+              </div>
+              <AuthNotice message={forgotPasswordMessage} error={forgotPasswordError} />
+              <FormField id="c-forgot-email" label={labels.email} icon={Mail} value={forgotPasswordEmail} onChange={e => setForgotPasswordEmail(e.target.value)} placeholder="email@exemple.com" required isRtl={isRtl} />
+              <button className="w-full h-12 border-none rounded-xl text-sm font-bold text-white cursor-pointer bg-accent-500 hover:bg-accent-600 disabled:opacity-60 disabled:cursor-not-allowed transition-all duration-200 flex items-center justify-center gap-2" type="submit" disabled={forgotPasswordLoading}>
+                {forgotPasswordLoading && <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />}
+                {forgotPasswordLoading ? labels.forgotPasswordSending : labels.forgotPasswordSend}
+              </button>
+              <button type="button" onClick={() => { setMode('login'); setForgotPasswordEmail(''); }} className={`block w-full mt-2 text-sm text-accent-600 font-medium cursor-pointer border-none bg-transparent hover:underline ${isRtl ? 'text-left' : 'text-right'}`}>
+                {labels.forgotPasswordBack}
+              </button>
+            </form>
+          )}
+
+          {mode === 'forgot-password' && verifyCodeStep === 2 && (
+            <form key="c-verify" className="space-y-4" onSubmit={handleVerifyCode} noValidate>
+              <div className="rounded-xl border border-accent-200 bg-accent-50 p-4 text-sm font-medium text-accent-800">
+                {labels.verifyCodeDesc}
+              </div>
+              <AuthNotice message={forgotPasswordMessage || verifyCodeMessage} error={verifyCodeError} />
+              <FormField id="c-verify-code" label={labels.verifyCode} icon={KeyRound} value={verifyCodeValue} onChange={e => setVerifyCodeValue(e.target.value)} placeholder="123456" required isRtl={isRtl} />
+              <button className="w-full h-12 border-none rounded-xl text-sm font-bold text-white cursor-pointer bg-accent-500 hover:bg-accent-600 disabled:opacity-60 disabled:cursor-not-allowed transition-all duration-200 flex items-center justify-center gap-2" type="submit" disabled={verifyCodeLoading}>
+                {verifyCodeLoading && <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />}
+                {verifyCodeLoading ? labels.verifyCodeLoading : labels.verifyCode}
+              </button>
+              <button type="button" onClick={() => { setVerifyCodeStep(1); setVerifyCodeValue(''); setVerifyCodeMessage(''); setVerifyCodeError(''); }} className={`block w-full mt-2 text-sm text-accent-600 font-medium cursor-pointer border-none bg-transparent hover:underline ${isRtl ? 'text-left' : 'text-right'}`}>
+                {labels.forgotPasswordBack}
+              </button>
+            </form>
+          )}
+
+          {mode === 'forgot-password' && verifyCodeStep === 3 && (
+            <form key="c-reset" className="space-y-4" onSubmit={handleResetPassword} noValidate>
+              <div className="rounded-xl border border-accent-200 bg-accent-50 p-4 text-sm font-medium text-accent-800">
+                {labels.resetPasswordDesc}
+              </div>
+              <AuthNotice message={resetPasswordMessage} error={resetPasswordError} />
+              <PasswordField id="c-reset-pass" label={labels.password} value={resetNewPassword} onChange={e => setResetNewPassword(e.target.value)} visible={visiblePasswords.resetNew} onToggle={() => togglePassword('resetNew')} autoComplete="new-password" isRtl={isRtl} />
+              <PasswordField id="c-reset-confirm" label={labels.confirmPassword} value={resetConfirmPassword} onChange={e => setResetConfirmPassword(e.target.value)} visible={visiblePasswords.resetConfirm} onToggle={() => togglePassword('resetConfirm')} autoComplete="new-password" isRtl={isRtl} />
+              <button className="w-full h-12 border-none rounded-xl text-sm font-bold text-white cursor-pointer bg-accent-500 hover:bg-accent-600 disabled:opacity-60 disabled:cursor-not-allowed transition-all duration-200 flex items-center justify-center gap-2" type="submit" disabled={resetPasswordLoading}>
+                {resetPasswordLoading && <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />}
+                {resetPasswordLoading ? labels.resetPasswordLoading : labels.resetPassword}
+              </button>
+              {resetPasswordMessage && (
+                <button type="button" onClick={() => { setMode('login'); setVerifyCodeStep(1); setForgotPasswordEmail(''); setVerifyCodeValue(''); setResetNewPassword(''); setResetConfirmPassword(''); }} className={`block w-full mt-2 text-sm text-accent-600 font-medium cursor-pointer border-none bg-transparent hover:underline ${isRtl ? 'text-left' : 'text-right'}`}>
+                  {labels.forgotPasswordBack}
+                </button>
+              )}
             </form>
           )}
 
           {mode === 'register' && (
             <form key="c-reg" className="space-y-4" onSubmit={handleCitizenRegister} noValidate>
               <FormField id="c-r-name" label={labels.fullName} icon={User} value={citizenRegisterForm.full_name} onChange={e => setCitizenRegisterForm(p => ({ ...p, full_name: e.target.value }))} required error={hasError ? ' ' : ''} autoComplete="name" isRtl={isRtl} />
-              <FormField id="c-r-user" label={labels.username} icon={User} value={citizenRegisterForm.username} onChange={e => setCitizenRegisterForm(p => ({ ...p, username: e.target.value }))} required error={hasError ? ' ' : ''} autoComplete="username" isRtl={isRtl} />
+              <FormField id="c-r-email" label={labels.email} icon={Mail} value={citizenRegisterForm.email} onChange={e => setCitizenRegisterForm(p => ({ ...p, email: e.target.value }))} placeholder="email@exemple.com" required error={hasError ? ' ' : ''} autoComplete="email" isRtl={isRtl} />
               <PasswordField id="c-r-pass" label={labels.password} value={citizenRegisterForm.password} onChange={e => setCitizenRegisterForm(p => ({ ...p, password: e.target.value }))} visible={visiblePasswords.citizenRegister} onToggle={() => togglePassword('citizenRegister')} error={hasError ? ' ' : ''} autoComplete="new-password" isRtl={isRtl} />
               <PasswordField id="c-r-confirm" label={labels.confirmPassword} value={citizenRegisterForm.confirmPassword} onChange={e => setCitizenRegisterForm(p => ({ ...p, confirmPassword: e.target.value }))} visible={visiblePasswords.citizenConfirm} onToggle={() => togglePassword('citizenConfirm')} error={hasError ? ' ' : ''} autoComplete="new-password" isRtl={isRtl} />
               <button className="w-full h-12 border-none rounded-xl text-sm font-bold text-white cursor-pointer bg-accent-500 hover:bg-accent-600 disabled:opacity-60 disabled:cursor-not-allowed transition-all duration-200 flex items-center justify-center gap-2" type="submit" disabled={loading}>
@@ -637,7 +730,14 @@ function CitizenLoginPage(props) {
 function AdminLoginPage(props) {
   const {
     mode, setMode, loginForm, setLoginForm, agentRegisterForm, setAgentRegisterForm,
-    handleLogin, handleAgentRegister, onBack, loading, message, error, hasError,
+    handleLogin, handleAgentRegister, handleForgotPassword, forgotPasswordEmail,
+    setForgotPasswordEmail, forgotPasswordLoading, forgotPasswordMessage,
+    forgotPasswordError, verifyCodeStep, setVerifyCodeStep, verifyCodeValue,
+    setVerifyCodeValue, verifyCodeLoading, verifyCodeMessage, setVerifyCodeMessage, verifyCodeError, setVerifyCodeError,
+    handleVerifyCode, resetNewPassword, setResetNewPassword, resetConfirmPassword,
+    setResetConfirmPassword, resetPasswordLoading, resetPasswordMessage,
+    resetPasswordError, handleResetPassword,
+    onBack, loading, message, error, hasError,
     visiblePasswords, togglePassword, lang, setLang, isRtl, labels,
   } = props;
 
@@ -686,22 +786,76 @@ function AdminLoginPage(props) {
 
           {mode === 'login' && (
             <form key="a-login" className="space-y-4" onSubmit={(e) => handleLogin(e, 'admin')} noValidate>
-              <FormField id="a-u" label={labels.username} icon={User} value={loginForm.username} onChange={e => setLoginForm(p => ({ ...p, username: e.target.value }))} required error={hasError ? ' ' : ''} autoComplete="username" isRtl={isRtl} />
+              <FormField id="a-u" label={labels.email} icon={Mail} value={loginForm.email} onChange={e => setLoginForm(p => ({ ...p, email: e.target.value }))} placeholder="email@exemple.com" required error={hasError ? ' ' : ''} autoComplete="email" isRtl={isRtl} />
               <PasswordField id="a-p" label={labels.password} value={loginForm.password} onChange={e => setLoginForm(p => ({ ...p, password: e.target.value }))} visible={visiblePasswords.login} onToggle={() => togglePassword('login')} error={hasError ? ' ' : ''} autoComplete="current-password" isRtl={isRtl} />
               <button className="w-full h-12 border-none rounded-xl text-sm font-bold text-white cursor-pointer bg-primary-900 hover:bg-primary-800 disabled:opacity-60 disabled:cursor-not-allowed transition-all duration-200 flex items-center justify-center gap-2" type="submit" disabled={loading}>
                 {loading && <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />}
                 {loading ? labels.loginLoading : labels.login}
               </button>
-              <button type="button" className={`block w-full mt-2 text-sm text-primary-700 font-medium cursor-pointer border-none bg-transparent hover:underline ${isRtl ? 'text-left' : 'text-right'}`}>
+              <button type="button" onClick={() => setMode('forgot-password')} className={`block w-full mt-2 text-sm text-primary-700 font-medium cursor-pointer border-none bg-transparent hover:underline ${isRtl ? 'text-left' : 'text-right'}`}>
                 {labels.forgotPassword}
               </button>
+            </form>
+          )}
+
+          {mode === 'forgot-password' && verifyCodeStep === 1 && (
+            <form key="a-forgot" className="space-y-4" onSubmit={handleForgotPassword} noValidate>
+              <div className="rounded-xl border border-primary-200 bg-primary-50 p-4 text-sm font-medium text-primary-800">
+                {labels.forgotPasswordDesc}
+              </div>
+              <AuthNotice message={forgotPasswordMessage} error={forgotPasswordError} />
+              <FormField id="a-forgot-email" label={labels.email} icon={Mail} value={forgotPasswordEmail} onChange={e => setForgotPasswordEmail(e.target.value)} placeholder="email@exemple.com" required isRtl={isRtl} />
+              <button className="w-full h-12 border-none rounded-xl text-sm font-bold text-white cursor-pointer bg-primary-900 hover:bg-primary-800 disabled:opacity-60 disabled:cursor-not-allowed transition-all duration-200 flex items-center justify-center gap-2" type="submit" disabled={forgotPasswordLoading}>
+                {forgotPasswordLoading && <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />}
+                {forgotPasswordLoading ? labels.forgotPasswordSending : labels.forgotPasswordSend}
+              </button>
+              <button type="button" onClick={() => { setMode('login'); setForgotPasswordEmail(''); }} className={`block w-full mt-2 text-sm text-primary-700 font-medium cursor-pointer border-none bg-transparent hover:underline ${isRtl ? 'text-left' : 'text-right'}`}>
+                {labels.forgotPasswordBack}
+              </button>
+            </form>
+          )}
+
+          {mode === 'forgot-password' && verifyCodeStep === 2 && (
+            <form key="a-verify" className="space-y-4" onSubmit={handleVerifyCode} noValidate>
+              <div className="rounded-xl border border-primary-200 bg-primary-50 p-4 text-sm font-medium text-primary-800">
+                {labels.verifyCodeDesc}
+              </div>
+              <AuthNotice message={forgotPasswordMessage || verifyCodeMessage} error={verifyCodeError} />
+              <FormField id="a-verify-code" label={labels.verifyCode} icon={KeyRound} value={verifyCodeValue} onChange={e => setVerifyCodeValue(e.target.value)} placeholder="123456" required isRtl={isRtl} />
+              <button className="w-full h-12 border-none rounded-xl text-sm font-bold text-white cursor-pointer bg-primary-900 hover:bg-primary-800 disabled:opacity-60 disabled:cursor-not-allowed transition-all duration-200 flex items-center justify-center gap-2" type="submit" disabled={verifyCodeLoading}>
+                {verifyCodeLoading && <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />}
+                {verifyCodeLoading ? labels.verifyCodeLoading : labels.verifyCode}
+              </button>
+              <button type="button" onClick={() => { setVerifyCodeStep(1); setVerifyCodeValue(''); setVerifyCodeMessage(''); setVerifyCodeError(''); }} className={`block w-full mt-2 text-sm text-primary-700 font-medium cursor-pointer border-none bg-transparent hover:underline ${isRtl ? 'text-left' : 'text-right'}`}>
+                {labels.forgotPasswordBack}
+              </button>
+            </form>
+          )}
+
+          {mode === 'forgot-password' && verifyCodeStep === 3 && (
+            <form key="a-reset" className="space-y-4" onSubmit={handleResetPassword} noValidate>
+              <div className="rounded-xl border border-primary-200 bg-primary-50 p-4 text-sm font-medium text-primary-800">
+                {labels.resetPasswordDesc}
+              </div>
+              <AuthNotice message={resetPasswordMessage} error={resetPasswordError} />
+              <PasswordField id="a-reset-pass" label={labels.password} value={resetNewPassword} onChange={e => setResetNewPassword(e.target.value)} visible={visiblePasswords.resetNew} onToggle={() => togglePassword('resetNew')} autoComplete="new-password" isRtl={isRtl} />
+              <PasswordField id="a-reset-confirm" label={labels.confirmPassword} value={resetConfirmPassword} onChange={e => setResetConfirmPassword(e.target.value)} visible={visiblePasswords.resetConfirm} onToggle={() => togglePassword('resetConfirm')} autoComplete="new-password" isRtl={isRtl} />
+              <button className="w-full h-12 border-none rounded-xl text-sm font-bold text-white cursor-pointer bg-primary-900 hover:bg-primary-800 disabled:opacity-60 disabled:cursor-not-allowed transition-all duration-200 flex items-center justify-center gap-2" type="submit" disabled={resetPasswordLoading}>
+                {resetPasswordLoading && <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />}
+                {resetPasswordLoading ? labels.resetPasswordLoading : labels.resetPassword}
+              </button>
+              {resetPasswordMessage && (
+                <button type="button" onClick={() => { setMode('login'); setVerifyCodeStep(1); setForgotPasswordEmail(''); setVerifyCodeValue(''); setResetNewPassword(''); setResetConfirmPassword(''); }} className={`block w-full mt-2 text-sm text-primary-700 font-medium cursor-pointer border-none bg-transparent hover:underline ${isRtl ? 'text-left' : 'text-right'}`}>
+                  {labels.forgotPasswordBack}
+                </button>
+              )}
             </form>
           )}
 
           {mode === 'register' && (
             <form key="a-reg" className="space-y-4" onSubmit={handleAgentRegister} noValidate>
               <FormField id="a-r-name" label={labels.fullName} icon={User} value={agentRegisterForm.full_name} onChange={e => setAgentRegisterForm(p => ({ ...p, full_name: e.target.value }))} required error={hasError ? ' ' : ''} autoComplete="name" isRtl={isRtl} />
-              <FormField id="a-r-user" label={labels.username} icon={User} value={agentRegisterForm.username} onChange={e => setAgentRegisterForm(p => ({ ...p, username: e.target.value }))} required error={hasError ? ' ' : ''} autoComplete="username" isRtl={isRtl} />
+              <FormField id="a-r-email" label={labels.email} icon={Mail} value={agentRegisterForm.email} onChange={e => setAgentRegisterForm(p => ({ ...p, email: e.target.value }))} placeholder="email@exemple.com" required error={hasError ? ' ' : ''} autoComplete="email" isRtl={isRtl} />
               <div className="flex flex-col gap-1.5">
                 <label htmlFor="a-r-role" className="text-sm font-semibold text-neutral-700">{labels.role}</label>
                 <select
@@ -711,7 +865,6 @@ function AdminLoginPage(props) {
                   className="w-full h-12 px-4 border-[1.5px] border-neutral-200 rounded-xl bg-white text-sm text-neutral-900 outline-none transition-all duration-150 focus:border-primary-500 focus:ring-2 focus:ring-primary-100 hover:border-neutral-300 cursor-pointer"
                 >
                   <option value="agent">{labels.roleAgent}</option>
-                  <option value="lecteur">{labels.roleReader}</option>
                   <option value="admin">{labels.roleAdmin}</option>
                 </select>
               </div>
@@ -740,9 +893,9 @@ function AuthGateway({ lang = 'ar', setLang = () => {}, setAuthUser }) {
   const labels = getCopy(normalizedLang);
   const [entry, setEntry] = useState('home');
   const [mode, setMode] = useState('login');
-  const [loginForm, setLoginForm] = useState({ username: '', password: '' });
-  const [agentRegisterForm, setAgentRegisterForm] = useState({ full_name: '', username: '', password: '', confirmPassword: '', role: 'agent' });
-  const [citizenRegisterForm, setCitizenRegisterForm] = useState({ full_name: '', username: '', password: '', confirmPassword: '', phone: '', email: '' });
+  const [loginForm, setLoginForm] = useState({ email: '', password: '' });
+  const [agentRegisterForm, setAgentRegisterForm] = useState({ full_name: '', email: '', password: '', confirmPassword: '', role: 'agent' });
+  const [citizenRegisterForm, setCitizenRegisterForm] = useState({ full_name: '', email: '', password: '', confirmPassword: '', phone: '' });
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -751,19 +904,57 @@ function AuthGateway({ lang = 'ar', setLang = () => {}, setAuthUser }) {
   const [publicTrackError, setPublicTrackError] = useState('');
   const [publicTrackLoading, setPublicTrackLoading] = useState(false);
   const [hasError, setHasError] = useState(false);
+  const [forgotPasswordEmail, setForgotPasswordEmail] = useState('');
+  const [forgotPasswordLoading, setForgotPasswordLoading] = useState(false);
+  const [forgotPasswordMessage, setForgotPasswordMessage] = useState('');
+  const [forgotPasswordError, setForgotPasswordError] = useState('');
+  const [verifyCodeStep, setVerifyCodeStep] = useState(1);
+  const [verifyCodeValue, setVerifyCodeValue] = useState('');
+  const [verifyCodeLoading, setVerifyCodeLoading] = useState(false);
+  const [verifyCodeMessage, setVerifyCodeMessage] = useState('');
+  const [verifyCodeError, setVerifyCodeError] = useState('');
+  const [resetNewPassword, setResetNewPassword] = useState('');
+  const [resetConfirmPassword, setResetConfirmPassword] = useState('');
+  const [resetPasswordLoading, setResetPasswordLoading] = useState(false);
+  const [resetPasswordMessage, setResetPasswordMessage] = useState('');
+  const [resetPasswordError, setResetPasswordError] = useState('');
   const [visiblePasswords, setVisiblePasswords] = useState({
     login: false, citizenRegister: false, citizenConfirm: false,
     agentRegister: false, agentConfirm: false,
+    resetNew: false, resetConfirm: false,
   });
 
   const resetFeedback = () => { setMessage(''); setError(''); setHasError(false); };
   const showError = (msg) => { setError(msg); setHasError(false); window.requestAnimationFrame(() => setHasError(true)); };
   const togglePassword = (key) => setVisiblePasswords(prev => ({ ...prev, [key]: !prev[key] }));
 
+  useEffect(() => {
+    if (forgotPasswordMessage && verifyCodeStep === 1) {
+      setVerifyCodeStep(2);
+    }
+  }, [forgotPasswordMessage, verifyCodeStep]);
+
+  useEffect(() => {
+    if (verifyCodeMessage && verifyCodeStep === 2) {
+      setVerifyCodeStep(3);
+    }
+  }, [verifyCodeMessage, verifyCodeStep]);
+
   const chooseEntry = (nextEntry) => {
     setEntry(nextEntry);
     setMode('login');
-    setLoginForm({ username: '', password: '' });
+    setLoginForm({ email: '', password: '' });
+    setForgotPasswordEmail('');
+    setForgotPasswordMessage('');
+    setForgotPasswordError('');
+    setVerifyCodeStep(1);
+    setVerifyCodeValue('');
+    setVerifyCodeMessage('');
+    setVerifyCodeError('');
+    setResetNewPassword('');
+    setResetConfirmPassword('');
+    setResetPasswordMessage('');
+    setResetPasswordError('');
     resetFeedback();
   };
 
@@ -772,7 +963,7 @@ function AuthGateway({ lang = 'ar', setLang = () => {}, setAuthUser }) {
     resetFeedback();
     setLoading(true);
     try {
-      const res = await authAPI.login(loginForm.username, loginForm.password);
+      const res = await authAPI.login(loginForm.email, loginForm.password);
       const user = res.data.user;
       if (expectedRole === 'citizen' && user.role !== 'citizen') { showError(labels.wrongAdminPortal); localStorage.removeItem('auth_token'); return; }
       if (expectedRole === 'admin' && user.role === 'citizen') { showError(labels.wrongCitizenPortal); localStorage.removeItem('auth_token'); return; }
@@ -792,7 +983,7 @@ function AuthGateway({ lang = 'ar', setLang = () => {}, setAuthUser }) {
       const { confirmPassword, ...payload } = agentRegisterForm;
       const res = await authAPI.register(payload);
       setMessage(res.data.message || labels.registerSent);
-      setAgentRegisterForm({ full_name: '', username: '', password: '', confirmPassword: '', role: 'agent' });
+      setAgentRegisterForm({ full_name: '', email: '', password: '', confirmPassword: '', role: 'agent' });
       setMode('login');
     } catch (err) { showError(err.response?.data?.message || labels.registerError); }
     finally { setLoading(false); }
@@ -823,11 +1014,64 @@ function AuthGateway({ lang = 'ar', setLang = () => {}, setAuthUser }) {
     finally { setPublicTrackLoading(false); }
   };
 
+  const handleForgotPassword = async (e) => {
+    e.preventDefault();
+    setForgotPasswordMessage('');
+    setForgotPasswordError('');
+    const email = forgotPasswordEmail.trim();
+    if (!email) { setForgotPasswordError(labels.trackRequired); return; }
+    setForgotPasswordLoading(true);
+    try {
+      const res = await authAPI.forgotPassword(email);
+      setForgotPasswordMessage(res.data.message || labels.forgotPasswordSuccess);
+      setVerifyCodeStep(2);
+    } catch (err) {
+      setForgotPasswordError(err.response?.data?.message || labels.loginError);
+    } finally { setForgotPasswordLoading(false); }
+  };
+
+  const handleVerifyCode = async (e) => {
+    e.preventDefault();
+    setVerifyCodeMessage('');
+    setVerifyCodeError('');
+    if (!verifyCodeValue.trim()) { setVerifyCodeError(labels.trackRequired); return; }
+    setVerifyCodeLoading(true);
+    try {
+      await authAPI.verifyCode(forgotPasswordEmail.trim(), verifyCodeValue.trim());
+      setVerifyCodeMessage(labels.verifyCodeSuccess);
+      setVerifyCodeStep(3);
+    } catch (err) {
+      setVerifyCodeError(err.response?.data?.message || 'Code invalide');
+    } finally { setVerifyCodeLoading(false); }
+  };
+
+  const handleResetPassword = async (e) => {
+    e.preventDefault();
+    setResetPasswordMessage('');
+    setResetPasswordError('');
+    if (!resetNewPassword || !resetConfirmPassword) { setResetPasswordError(labels.trackRequired); return; }
+    if (resetNewPassword !== resetConfirmPassword) { setResetPasswordError(labels.passwordMismatch); return; }
+    if (resetNewPassword.length < 8) { setResetPasswordError('Le mot de passe doit contenir au moins 8 caractères'); return; }
+    setResetPasswordLoading(true);
+    try {
+      await authAPI.resetPassword(forgotPasswordEmail.trim(), verifyCodeValue.trim(), resetNewPassword);
+      setResetPasswordMessage(labels.resetPasswordSuccess);
+    } catch (err) {
+      setResetPasswordError(err.response?.data?.message || labels.loginError);
+    } finally { setResetPasswordLoading(false); }
+  };
+
   const commonProps = {
     lang: normalizedLang, setLang, isRtl, labels, mode,
     setMode: (m) => { setMode(m); resetFeedback(); },
     loginForm, setLoginForm, onBack: () => chooseEntry('home'),
     loading, message, error, hasError, visiblePasswords, togglePassword, handleLogin,
+    handleForgotPassword, forgotPasswordEmail, setForgotPasswordEmail,
+    forgotPasswordLoading, forgotPasswordMessage, forgotPasswordError,
+    verifyCodeStep, setVerifyCodeStep, verifyCodeValue, setVerifyCodeValue,
+    verifyCodeLoading, verifyCodeMessage, verifyCodeError, handleVerifyCode,
+    resetNewPassword, setResetNewPassword, resetConfirmPassword, setResetConfirmPassword,
+    resetPasswordLoading, resetPasswordMessage, resetPasswordError, handleResetPassword,
   };
 
   if (entry === 'citizen') {

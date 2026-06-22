@@ -55,9 +55,9 @@ export default function ReportsPage() {
       const res = await adminAPI.exportDemandes({ ...reportFilters, format: 'json' });
       const ExcelJS = await import('exceljs');
       const rows = (res.data.data || []).map(d => ({
-        'N dossier': d.numero_dossier, 'Nom pharmacien': d.nom_complet, CIN: d.cin,
+        'N dossier': d.numero_dossier, 'Nom demandeur': d.nom_complet, CIN: d.cin,
         Commune: d.commune, Cercle: d.cercle, Statut: STATUS_CONFIG[d.statut]?.label_fr || d.statut,
-        Source: d.source || '', 'Agent traitant': d.created_by_full_name || '',
+        'Type licence': d.licence_type || '', Source: d.source || '', 'Agent traitant': d.created_by_full_name || '',
         'Citoyen': d.citizen_full_name || '', 'Dernier evenement': d.workflow_last_event || '',
         'Date creation': formatDate(d.date_creation), 'Date decision': formatDate(d.date_decision)
       }));
@@ -65,9 +65,9 @@ export default function ReportsPage() {
       const workbook = new ExcelJS.Workbook();
       const worksheet = workbook.addWorksheet(t(lang, 'searchTitle'));
       worksheet.columns = [
-        { header: 'N dossier', key: 'numero_dossier' }, { header: 'Nom pharmacien', key: 'nom_complet' },
+        { header: 'N dossier', key: 'numero_dossier' }, { header: 'Nom demandeur', key: 'nom_complet' },
         { header: 'CIN', key: 'cin' }, { header: 'Commune', key: 'commune' }, { header: 'Cercle', key: 'cercle' },
-        { header: 'Statut', key: 'statut' }, { header: 'Source', key: 'source' },
+        { header: 'Statut', key: 'statut' }, { header: 'Type licence', key: 'licence_type' }, { header: 'Source', key: 'source' },
         { header: 'Agent traitant', key: 'created_by_full_name' }, { header: 'Citoyen', key: 'citizen_full_name' },
         { header: 'Dernier evenement', key: 'workflow_last_event' }, { header: 'Date creation', key: 'date_creation' },
         { header: 'Date decision', key: 'date_decision' }

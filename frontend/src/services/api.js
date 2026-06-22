@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const API = axios.create({ baseURL: 'http://localhost:5000/api' });
+const API = axios.create({ baseURL: 'http://localhost:3001/api' });
 let pendingRequests = 0;
 const notifyPending = () => {
   window.dispatchEvent(new CustomEvent('api-pending-changed', { detail: { pending: pendingRequests } }));
@@ -36,9 +36,12 @@ API.interceptors.response.use((response) => {
 });
 
 export const authAPI = {
-  login: (username, password) => API.post('/auth/login', { username, password }),
+  login: (email, password) => API.post('/auth/login', { email, password }),
   register: (data) => API.post('/auth/register', data),
   registerCitizen: (data) => API.post('/auth/register-citizen', data),
+  forgotPassword: (email) => API.post('/auth/forgot-password', { email }),
+  verifyCode: (email, code) => API.post('/auth/verify-code', { email, code }),
+  resetPassword: (email, code, newPassword) => API.post('/auth/reset-password', { email, code, newPassword }),
   me: () => API.get('/auth/me'),
 };
 
@@ -117,6 +120,7 @@ export const citizenAPI = {
   getMine: () => API.get('/citizen/demandes'),
   getById: (id) => API.get(`/citizen/demandes/${id}`),
   update: (id, data) => API.put(`/citizen/demandes/${id}`, data),
+  annuler: (id) => API.patch(`/citizen/demandes/${id}/annuler`),
   // ── Pièces jointes ────────────────────────────────────────────────────────
   uploadPiecesJointes: (demandeId, fichiers) =>
     API.post(`/citizen/demandes/${demandeId}/pieces-jointes`, { fichiers }),
@@ -168,7 +172,7 @@ export const pdfAPI = {
       const url = URL.createObjectURL(new Blob([res.data], { type: 'application/pdf' }));
       const a = document.createElement('a');
       a.href = url;
-      a.download = `rapport_licences_pharmacies_${new Date().toISOString().slice(0, 10)}.pdf`;
+      a.download = `rapport_complet_licences_${new Date().toISOString().slice(0, 10)}.pdf`;
       a.click();
       URL.revokeObjectURL(url);
     });
@@ -190,12 +194,86 @@ export const ocrAPI = {
   // Phase 1 : extraction texte brut depuis une image
   extractText: (image, mimeType) => API.post('/ocr/extract-text', { image, mimeType }),
   // Phase 2 : analyse de tous les textes extraits → remplissage formulaire
-  analyzeTexts: (texts) => API.post('/ocr/analyze-texts', { texts }),
+  analyzeTexts: (texts, expectedFields) => API.post('/ocr/analyze-texts', { texts, expected_fields: expectedFields }),
+  // Nouveau : OCR direct par type (Pixtral voit l'image, extrait directement le JSON)
+  parseByType: (image, mimeType, licenceType, docType) =>
+    API.post('/ocr/parse-by-type', { image, mimeType, licence_type: licenceType, doc_type: docType }),
 };
 
 export const auditAPI = {
   getLogs: (params) => API.get('/audit', { params }),
   getFilters: () => API.get('/audit/filters'),
   logExcelExport: (payload = {}) => API.post('/audit/export-excel', payload),
-  exportCSV: (params) => API.get('/audit/export-csv', { params, responseType: 'blob' }), // PHASE 4 FINAL
+  exportCSV: (params) => API.get('/audit/export-csv', { params, responseType: 'blob' }),
+};
+
+export const aiAPI = {
+  chat: (message, history = []) => API.post('/ai/chat', { message, history }),
+  chatStream: async (message, history = [], onToken) => {
+    const token = localStorage.getItem('auth_token');
+    const response = await fetch(`${API.defaults.baseURL}/ai/chat/stream`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+      },
+      body: JSON.stringify({ message, history })
+    });
+
+    if (!response.ok) {
+      throw new Error('Stream error');
+    }
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let fullText = '';
+    let buffer = '';
+
+    const flushBuffer = () => {
+      if (buffer.trim()) {
+        const trimmed = buffer.trim();
+        if (trimmed.startsWith('data: ')) {
+          const data = trimmed.slice(6);
+          if (data !== '[DONE]') {
+            try {
+              const parsed = JSON.parse(data);
+              if (parsed.token) {
+                fullText += parsed.token;
+                onToken(parsed.token, fullText);
+              }
+            } catch (e) {}
+          }
+        }
+        buffer = '';
+      }
+    };
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop() || '';
+
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed || !trimmed.startsWith('data: ')) continue;
+
+        const data = trimmed.slice(6);
+        if (data === '[DONE]') continue;
+
+        try {
+          const parsed = JSON.parse(data);
+          if (parsed.token) {
+            fullText += parsed.token;
+            onToken(parsed.token, fullText);
+          }
+        } catch (e) {}
+      }
+    }
+
+    flushBuffer();
+    return fullText;
+  }
 };

@@ -136,9 +136,6 @@
   .role-agent {
     @apply bg-success-100 text-success-700;
   }
-  .role-lecteur {
-    @apply bg-neutral-100 text-neutral-600;
-  }
 
   /* ── Citizen status badge (legacy compat) ── */
   /* ── Filter Select custom ── */

@@ -1,45 +1,332 @@
-version: '3.8'
-
 services:
+  # ─── PostgreSQL ─────────────────────────────────────────────────────────────
   db:
-    image: mysql:8
+    image: postgres:16-alpine
     container_name: khemisset_db
     restart: always
     environment:
-      MYSQL_ROOT_PASSWORD: rootpassword
-      MYSQL_DATABASE: khemisset_db
+      POSTGRES_DB: kh_data
+      POSTGRES_USER: kh_user
+      POSTGRES_PASSWORD: kh_password
     ports:
-      - "3308:3306"
+      - "5432:5432"
     volumes:
-      - db_data:/var/lib/mysql
-      - ./db/khemisset_db.sql:/docker-entrypoint-initdb.d/init.sql
+      - pg_data:/var/lib/postgresql/data
+      - ./db/khemisset_pg.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - khemisset-network
 
-  backend:
-    build: ./backend
-    container_name: khemisset_backend
+  # ─── Redis ──────────────────────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: khemisset_redis
+    restart: always
+    command: redis-server --requirepass redispassword
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - khemisset-network
+
+  # ─── API Gateway ───────────────────────────────────────────────────────────
+  api-gateway:
+    build:
+      context: .
+      dockerfile: api-gateway/Dockerfile
+    image: l-api-gateway
+    container_name: khemisset_api_gateway
     restart: always
     ports:
-      - "5000:5000"
+      - "3001:3001"
     environment:
-      PORT: 5000
+      PORT: 3001
+      NODE_ENV: production
+      CORS_ORIGINS: http://localhost,http://localhost:3000
+      AUTH_SERVICE_URL: http://auth-service:5001
+      USER_SERVICE_URL: http://user-service:5002
+      DEMANDES_SERVICE_URL: http://demandes-service:5003
+      PDF_SERVICE_URL: http://pdf-service:5004
+      OCR_SERVICE_URL: http://ocr-service:5005
+      AI_SERVICE_URL: http://ai-service:5006
+      NOTIFICATION_SERVICE_URL: http://notification-service:5007
+      AUDIT_SERVICE_URL: http://audit-service:5008
+      WORKFLOW_SERVICE_URL: http://workflow-service:5009
+      LICENCES_SERVICE_URL: http://licences-service:5010
+    depends_on:
+      - auth-service
+      - user-service
+      - demandes-service
+      - pdf-service
+      - ocr-service
+      - ai-service
+      - notification-service
+      - audit-service
+      - workflow-service
+      - licences-service
+    networks:
+      - khemisset-network
+
+  # ─── Auth Service ──────────────────────────────────────────────────────────
+  auth-service:
+    build:
+      context: .
+      dockerfile: services/auth-service/Dockerfile
+    image: l-auth-service
+    container_name: khemisset_auth_service
+    restart: always
+    ports:
+      - "5001:5001"
+    environment:
+      PORT: 5001
       DB_HOST: db
-      DB_USER: root
-      DB_PASSWORD: rootpassword
-      DB_NAME: khemisset_db
-      DB_PORT: 3306
+      DB_USER: kh_user
+      DB_PASSWORD: kh_password
+      DB_NAME: kh_data
+      DB_PORT: 5432
+      REDIS_URL: redis://:redispassword@redis:6379
       JWT_SECRET: super_secret_jwt_key_32_chars_min
-      CORS_ORIGINS: http://localhost:3000
+      JWT_EXPIRES: 8h
+      EMAIL_FROM: oracluk@gmail.com
+      EMAIL_PASSWORD: myqehehzsfufjetg
     depends_on:
       - db
+      - redis
+    networks:
+      - khemisset-network
 
+  # ─── User Service ──────────────────────────────────────────────────────────
+  user-service:
+    build:
+      context: .
+      dockerfile: services/user-service/Dockerfile
+    image: l-user-service
+    container_name: khemisset_user_service
+    restart: always
+    ports:
+      - "5002:5002"
+    environment:
+      PORT: 5002
+      DB_HOST: db
+      DB_USER: kh_user
+      DB_PASSWORD: kh_password
+      DB_NAME: kh_data
+      DB_PORT: 5432
+      REDIS_URL: redis://:redispassword@redis:6379
+      JWT_SECRET: super_secret_jwt_key_32_chars_min
+    depends_on:
+      - db
+      - redis
+    networks:
+      - khemisset-network
+
+  # ─── Demandes Service ────────────────────────────────────────────────────
+  demandes-service:
+    build:
+      context: .
+      dockerfile: services/demandes-service/Dockerfile
+    image: l-demandes-service
+    container_name: khemisset_demandes_service
+    restart: always
+    ports:
+      - "5003:5003"
+    environment:
+      PORT: 5003
+      DB_HOST: db
+      DB_USER: kh_user
+      DB_PASSWORD: kh_password
+      DB_NAME: kh_data
+      DB_PORT: 5432
+      REDIS_URL: redis://:redispassword@redis:6379
+      JWT_SECRET: super_secret_jwt_key_32_chars_min
+    volumes:
+      - uploads_data:/app/uploads
+    depends_on:
+      - db
+      - redis
+    networks:
+      - khemisset-network
+
+  # ─── PDF Service ────────────────────────────────────────────────────────────
+  pdf-service:
+    build:
+      context: .
+      dockerfile: services/pdf-service/Dockerfile
+    image: l-pdf-service
+    container_name: khemisset_pdf_service
+    restart: always
+    ports:
+      - "5004:5004"
+    environment:
+      PORT: 5004
+      DB_HOST: db
+      DB_USER: kh_user
+      DB_PASSWORD: kh_password
+      DB_NAME: kh_data
+      DB_PORT: 5432
+      JWT_SECRET: super_secret_jwt_key_32_chars_min
+    depends_on:
+      - db
+    networks:
+      - khemisset-network
+
+  # ─── OCR Service ───────────────────────────────────────────────────────────
+  ocr-service:
+    build:
+      context: .
+      dockerfile: services/ocr-service/Dockerfile
+    image: l-ocr-service
+    container_name: khemisset_ocr_service
+    restart: always
+    ports:
+      - "5005:5005"
+    environment:
+      PORT: 5005
+      DB_HOST: db
+      DB_USER: kh_user
+      DB_PASSWORD: kh_password
+      DB_NAME: kh_data
+      DB_PORT: 5432
+      JWT_SECRET: super_secret_jwt_key_32_chars_min
+      MISTRAL_API_KEY: 4cp3QuJSOULrEdKmmTrsf6R8kqXyqJ7P
+    depends_on:
+      - db
+    networks:
+      - khemisset-network
+
+  # ─── AI Service ────────────────────────────────────────────────────────────
+  ai-service:
+    build:
+      context: .
+      dockerfile: services/ai-service/Dockerfile
+    image: l-ai-service
+    container_name: khemisset_ai_service
+    restart: always
+    ports:
+      - "5006:5006"
+    environment:
+      PORT: 5006
+      JWT_SECRET: super_secret_jwt_key_32_chars_min
+      MISTRAL_API_KEY: 4cp3QuJSOULrEdKmmTrsf6R8kqXyqJ7P
+    networks:
+      - khemisset-network
+
+  # ─── Notification Service ──────────────────────────────────────────────────
+  notification-service:
+    build:
+      context: .
+      dockerfile: services/notification-service/Dockerfile
+    image: l-notification-service
+    container_name: khemisset_notification_service
+    restart: always
+    ports:
+      - "5007:5007"
+    environment:
+      PORT: 5007
+      DB_HOST: db
+      DB_USER: kh_user
+      DB_PASSWORD: kh_password
+      DB_NAME: kh_data
+      DB_PORT: 5432
+      REDIS_URL: redis://:redispassword@redis:6379
+      JWT_SECRET: super_secret_jwt_key_32_chars_min
+    depends_on:
+      - db
+      - redis
+    networks:
+      - khemisset-network
+
+  # ─── Audit Service ─────────────────────────────────────────────────────────
+  audit-service:
+    build:
+      context: .
+      dockerfile: services/audit-service/Dockerfile
+    image: l-audit-service
+    container_name: khemisset_audit_service
+    restart: always
+    ports:
+      - "5008:5008"
+    environment:
+      PORT: 5008
+      DB_HOST: db
+      DB_USER: kh_user
+      DB_PASSWORD: kh_password
+      DB_NAME: kh_data
+      DB_PORT: 5432
+      REDIS_URL: redis://:redispassword@redis:6379
+      JWT_SECRET: super_secret_jwt_key_32_chars_min
+    depends_on:
+      - db
+      - redis
+    networks:
+      - khemisset-network
+
+  # ─── Workflow Service ──────────────────────────────────────────────────────
+  workflow-service:
+    build:
+      context: .
+      dockerfile: services/workflow-service/Dockerfile
+    image: l-workflow-service
+    container_name: khemisset_workflow_service
+    restart: always
+    ports:
+      - "5009:5009"
+    environment:
+      PORT: 5009
+      DB_HOST: db
+      DB_USER: kh_user
+      DB_PASSWORD: kh_password
+      DB_NAME: kh_data
+      DB_PORT: 5432
+      JWT_SECRET: super_secret_jwt_key_32_chars_min
+    depends_on:
+      - db
+    networks:
+      - khemisset-network
+
+  # ─── Licences Service ──────────────────────────────────────────────────────
+  licences-service:
+    build:
+      context: .
+      dockerfile: services/licences-service/Dockerfile
+    image: l-licences-service
+    container_name: khemisset_licences_service
+    restart: always
+    ports:
+      - "5010:5010"
+    environment:
+      PORT: 5010
+      DB_HOST: db
+      DB_USER: kh_user
+      DB_PASSWORD: kh_password
+      DB_NAME: kh_data
+      DB_PORT: 5432
+      JWT_SECRET: super_secret_jwt_key_32_chars_min
+    depends_on:
+      - db
+    networks:
+      - khemisset-network
+
+  # ─── Frontend ──────────────────────────────────────────────────────────────
   frontend:
-    build: ./frontend
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    image: l-frontend
     container_name: khemisset_frontend
     restart: always
     ports:
-      - "3000:3000"
+      - "80:3000"
     depends_on:
-      - backend
+      - api-gateway
+    networks:
+      - khemisset-network
 
 volumes:
-  db_data:
+  pg_data:
+  redis_data:
+  uploads_data:
+
+networks:
+  khemisset-network:
+    driver: bridge

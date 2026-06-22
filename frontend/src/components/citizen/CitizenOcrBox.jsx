@@ -2,6 +2,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import { ocrAPI } from '../../services/api';
 import { mergeOcrIntoForm } from '../../constants/licenceConfig';
 import { t } from '../../i18n/translations';
+import { filterByLang } from '../../utils/languageFilter';
+import { FileText, Clock, CheckCircle2, Search, Bot, XCircle, Trash2, Upload, RefreshCw } from 'lucide-react';
 
 const OCR_FIELD_LABELS = {
   nom_complet: { fr: 'Nom complet', ar: 'الاسم الكامل' },
@@ -53,14 +55,15 @@ const compressImage = (file) => new Promise((resolve) => {
   reader.readAsDataURL(file);
 });
 
-const docStatusIcon = (status) => {
-  if (status === 'idle') return '📄';
-  if (status === 'compressing') return '⏳';
-  if (status === 'ready') return '✅';
-  if (status === 'extracting') return '🔍';
-  if (status === 'done') return '🤖';
-  if (status === 'error') return '❌';
-  return '📄';
+const DocStatusIcon = ({ status, className = '' }) => {
+  const cls = `w-5 h-5 shrink-0 ${className}`;
+  if (status === 'idle') return <FileText className={cls} />;
+  if (status === 'compressing') return <Clock className={`${cls} animate-pulse`} />;
+  if (status === 'ready') return <CheckCircle2 className={`${cls} text-emerald-500`} />;
+  if (status === 'extracting') return <Search className={`${cls} text-blue-500 animate-pulse`} />;
+  if (status === 'done') return <Bot className={`${cls} text-emerald-500`} />;
+  if (status === 'error') return <XCircle className={`${cls} text-red-500`} />;
+  return <FileText className={cls} />;
 };
 
 function CitizenOcrBox({ onApply, licenceDocuments = [], compact = false, lang }) {
@@ -132,6 +135,11 @@ function CitizenOcrBox({ onApply, licenceDocuments = [], compact = false, lang }
   };
 
   const updateMerged = (k, v) => setMerged(p => ({ ...p, [k]: v }));
+
+  const updateMergedFiltered = (k, v) => {
+    const filtered = filterByLang(v, lang);
+    setMerged(p => ({ ...p, [k]: filtered }));
+  };
 
   const isMultiMode = licenceDocuments.length > 0;
 
@@ -233,46 +241,41 @@ function CitizenOcrBox({ onApply, licenceDocuments = [], compact = false, lang }
   };
 
   const statusLabel = (doc) => {
-    if (doc.status === 'pending') return '⏳ En attente';
-    if (doc.status === 'extracting') return '📖 Lecture...';
-    if (doc.status === 'extracted') return '✅ Texte extrait';
-    return `❌ Échec${doc.errorMsg ? ` (${doc.errorMsg.slice(0, 35)})` : ''}`;
+    if (doc.status === 'pending') return 'En attente';
+    if (doc.status === 'extracting') return 'Lecture...';
+    if (doc.status === 'extracted') return 'Texte extrait';
+    return `Échec${doc.errorMsg ? ` (${doc.errorMsg.slice(0, 35)})` : ''}`;
   };
 
   const renderMergedFields = () => {
     const fieldEntries = Object.entries(merged).filter(([, v]) => v !== undefined);
     if (!fieldEntries.length) return null;
     return (
-      <div style={{ marginTop: 12 }}>
-        <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
-          <span>🤖</span>
+      <div className="mt-3">
+        <div className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400 mb-2 font-semibold">
+          <Bot className="w-4 h-4 text-emerald-500" />
           <strong>{lang === 'ar' ? 'البيانات المستخرجة — راجع وصحح قبل التأكيد' : 'Données extraites — vérifiez avant confirmation'}</strong>
         </div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 10 }}>
+        <div className="grid grid-cols-[repeat(auto-fill,minmax(220px,1fr))] gap-2.5">
           {fieldEntries.map(([key, value]) => {
             const isAutoExtracted = !!value;
             const label = OCR_FIELD_LABELS[key]?.[lang] || key;
             return (
-              <div key={key} style={{
-                background: isAutoExtracted ? '#f0fdf4' : '#fafafa',
-                border: `1px solid ${isAutoExtracted ? '#bbf7d0' : '#e5e7eb'}`,
-                borderRadius: 8, padding: '8px 10px'
-              }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-                  <label style={{ fontSize: 11, color: '#374151', fontWeight: 600 }}>{label}</label>
-                  <span style={{
-                    fontSize: 10, padding: '1px 6px', borderRadius: 10,
-                    background: isAutoExtracted ? '#dcfce7' : '#f3f4f6',
-                    color: isAutoExtracted ? 'var(--gov-accent-dark)' : '#6b7280'
-                  }}>
+              <div key={key} className={`rounded-lg p-2 border ${isAutoExtracted ? 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-700' : 'bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-600'}`}>
+                <div className="flex justify-between items-center mb-1">
+                  <label className="text-[11px] text-slate-600 dark:text-slate-400 font-semibold">{label}</label>
+                  <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${isAutoExtracted ? 'bg-emerald-100 dark:bg-emerald-800 text-emerald-700 dark:text-emerald-300' : 'bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400'}`}>
                     {isAutoExtracted ? t(lang, 'ocrExtracted') : t(lang, 'ocrManual')}
                   </span>
                 </div>
                 <input
                   type={key.includes('date') ? 'date' : 'text'}
                   value={value}
-                  onChange={e => updateMerged(key, key === 'cin' ? e.target.value.toUpperCase() : e.target.value)}
-                  style={{ width: '100%', padding: '4px 6px', fontSize: 13, border: '1px solid #d1d5db', borderRadius: 6 }}
+                  onChange={e => {
+                    const val = key === 'cin' ? e.target.value.toUpperCase() : filterByLang(e.target.value, lang);
+                    updateMerged(key, val);
+                  }}
+                  className="w-full px-1.5 py-1 text-sm border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500/20"
                 />
               </div>
             );
@@ -287,46 +290,43 @@ function CitizenOcrBox({ onApply, licenceDocuments = [], compact = false, lang }
     const nonOcrDocs = licenceDocuments.filter(d => !d.ocr);
 
     return (
-      <div className={`bg-white border border-[#dce8df] rounded-lg flex flex-col gap-[14px] p-[18px] shadow-[0_10px_26px_rgba(19,34,56,0.06)] ${compact ? 'bg-[#fbfdfb]' : ''}`}>
-        <h4 style={{ fontSize: 14, fontWeight: 700, color: '#0f3f32', marginBottom: 12 }}>
-          {lang === 'ar' ? '📎 رفع الوثائق والقراءة التلقائية' : '📎 Upload des documents & lecture automatique'}
+      <div className={`bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl flex flex-col gap-4 p-5 shadow-sm ${compact ? 'bg-slate-50 dark:bg-slate-800/50' : ''}`}>
+        <h4 className="text-sm font-bold text-slate-800 dark:text-white mb-2">
+          {lang === 'ar' ? 'رفع الوثائق والقراءة التلقائية' : 'Upload des documents & lecture automatique'}
         </h4>
 
         {ocrDocs.length > 0 && (
-          <div style={{ marginBottom: 20 }}>
-            <p style={{ fontSize: 12, color: '#6b7280', marginBottom: 10 }}>
+          <div className="mb-5">
+            <p className="text-xs text-slate-500 dark:text-slate-400 mb-3">
               {lang === 'ar'
-                ? '⚡ الوثائق التالية تدعم الاستخراج التلقائي للبيانات:'
-                : '⚡ Ces documents supportent l\'extraction automatique des données :'}
+                ? 'الوثائق التالية تدعم الاستخراج التلقائي للبيانات:'
+                : 'Ces documents supportent l\'extraction automatique des données :'}
             </p>
             {ocrDocs.map(doc => {
               const slot = docSlot[doc.key] || {};
               const label = lang === 'ar' ? doc.label_ar : doc.label_fr;
+              const borderColor = slot.confirmed ? 'border-emerald-500' : slot.status === 'done' ? 'border-blue-500' : slot.status === 'error' ? 'border-red-400' : 'border-slate-200 dark:border-slate-600';
               return (
-                <div key={doc.key} style={{
-                  border: `2px solid ${slot.confirmed ? 'var(--gov-accent)' : slot.status === 'done' ? '#2563eb' : slot.status === 'error' ? '#ef4444' : '#e5e7eb'}`,
-                  borderRadius: 10, padding: 14, marginBottom: 12,
-                  background: slot.confirmed ? '#f0fdf4' : '#ffffff'
-                }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
-                    <span style={{ fontSize: 20 }}>{docStatusIcon(slot.status)}</span>
-                    <div style={{ flex: 1 }}>
-                      <strong style={{ fontSize: 13, color: '#1e293b' }}>{label}</strong>
-                      <div style={{ fontSize: 11, color: '#6b7280' }}>
+                <div key={doc.key} className={`border-2 ${borderColor} rounded-xl p-4 mb-3 transition-colors ${slot.confirmed ? 'bg-emerald-50 dark:bg-emerald-900/20' : 'bg-white dark:bg-slate-800'}`}>
+                  <div className="flex items-center gap-3 mb-3">
+                    <DocStatusIcon status={slot.status} />
+                    <div className="flex-1 min-w-0">
+                      <strong className="text-sm text-slate-800 dark:text-white">{label}</strong>
+                      <div className="text-xs text-slate-500 dark:text-slate-400">
                         {slot.status === 'idle' && (lang === 'ar' ? 'في انتظار الرفع' : 'En attente d\'upload')}
                         {slot.status === 'compressing' && (lang === 'ar' ? 'جاري الضغط...' : 'Compression...')}
                         {slot.status === 'ready' && (lang === 'ar' ? 'جاهز للتحليل' : 'Prêt pour analyse')}
-                        {slot.status === 'extracting' && (lang === 'ar' ? '🔍 جاري الاستخراج...' : '🔍 Extraction en cours...')}
-                        {slot.status === 'done' && !slot.confirmed && (lang === 'ar' ? '✅ البيانات مستخرجة — راجع وأكد' : '✅ Données extraites — vérifiez et confirmez')}
-                        {slot.confirmed && (lang === 'ar' ? '✅ تأكيد البيانات' : '✅ Données confirmées')}
-                        {slot.status === 'error' && `❌ ${slot.errorMsg || 'Erreur'}`}
+                        {slot.status === 'extracting' && (lang === 'ar' ? 'جاري الاستخراج...' : 'Extraction en cours...')}
+                        {slot.status === 'done' && !slot.confirmed && (lang === 'ar' ? 'البيانات مستخرجة — راجع وأكد' : 'Données extraites — vérifiez et confirmez')}
+                        {slot.confirmed && (lang === 'ar' ? 'تأكيد البيانات' : 'Données confirmées')}
+                        {slot.status === 'error' && (slot.errorMsg || 'Erreur')}
                       </div>
                     </div>
                     {!slot.confirmed && (
-                      <label style={{ cursor: 'pointer', padding: '5px 12px', background: '#f1f5f9', border: '1px solid #cbd5e1', borderRadius: 6, fontSize: 12 }}>
+                      <label className="cursor-pointer px-3 py-1.5 bg-slate-100 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg text-xs font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors">
                         {slot.previewUrl
-                          ? (lang === 'ar' ? '🔄 تغيير' : '🔄 Changer')
-                          : (lang === 'ar' ? '📤 رفع' : '📤 Importer')}
+                          ? (lang === 'ar' ? 'تغيير' : 'Changer')
+                          : (lang === 'ar' ? 'رفع' : 'Importer')}
                         <input
                           type="file" accept="image/*,.pdf" hidden
                           onChange={e => e.target.files[0] && handleDocFileChange(doc.key, e.target.files[0])}
@@ -337,52 +337,54 @@ function CitizenOcrBox({ onApply, licenceDocuments = [], compact = false, lang }
 
                   {slot.previewUrl && (
                     <img src={slot.previewUrl} alt={label}
-                      style={{ maxHeight: 120, borderRadius: 6, marginBottom: 10, border: '1px solid #e5e7eb' }} />
+                      className="max-h-[120px] rounded-lg mb-3 border border-slate-200 dark:border-slate-600" />
                   )}
 
                   {slot.status === 'ready' && !slot.confirmed && (
-                    <button type="button" className="inline-flex items-center justify-center gap-2 min-h-[30px] bg-accent-500 text-white rounded-lg font-extrabold px-[14px] py-[5px] border-none cursor-pointer hover:bg-accent-700 hover:-translate-y-0.5 transition-all duration-150 disabled:opacity-65 disabled:cursor-not-allowed"
-                      style={{ fontSize: 12 }}
+                    <button type="button" className="inline-flex items-center justify-center gap-2 min-h-[32px] bg-[#10B981] hover:bg-[#059669] text-white rounded-lg text-xs font-bold px-3.5 py-1.5 border-none cursor-pointer transition-all duration-200 shadow-sm hover:shadow-md"
                       onClick={() => runOcrForDoc(doc.key)}
                     >
-                      🤖 {lang === 'ar' ? 'تحليل بالذكاء الاصطناعي' : 'Analyser avec l\'IA'}
+                      <Bot className="w-3.5 h-3.5" />
+                      {lang === 'ar' ? 'تحليل بالذكاء الاصطناعي' : 'Analyser avec l\'IA'}
                     </button>
                   )}
 
                   {slot.status === 'done' && !slot.confirmed && Object.keys(slot.extracted).length > 0 && (
-                    <div style={{ marginTop: 10 }}>
-                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 8 }}>
+                    <div className="mt-3">
+                      <div className="grid grid-cols-[repeat(auto-fill,minmax(180px,1fr))] gap-2">
                         {Object.entries(slot.extracted).map(([key, value]) => value ? (
-                          <div key={key} style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 6, padding: '6px 8px' }}>
-                            <div style={{ fontSize: 10, color: 'var(--gov-accent-dark)', fontWeight: 600, marginBottom: 2 }}>
-                              {key} <span style={{ background: '#dcfce7', borderRadius: 4, padding: '1px 4px' }}>OCR</span>
+                          <div key={key} className="bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-700 rounded-lg p-2">
+                            <div className="text-[10px] text-emerald-700 dark:text-emerald-300 font-semibold mb-1">
+                              {key} <span className="bg-emerald-100 dark:bg-emerald-800 rounded px-1 py-0.5 text-[9px]">OCR</span>
                             </div>
                             <input
                               type={key.includes('date') ? 'date' : 'text'}
                               value={value}
                               onChange={e => {
+                                const val = filterByLang(e.target.value, lang);
                                 setDocSlot(prev => ({
                                   ...prev,
-                                  [doc.key]: { ...prev[doc.key], extracted: { ...prev[doc.key].extracted, [key]: e.target.value } }
+                                  [doc.key]: { ...prev[doc.key], extracted: { ...prev[doc.key].extracted, [key]: val } }
                                 }));
-                                setMerged(prev => mergeOcrIntoForm(prev, { [key]: e.target.value }));
+                                setMerged(prev => mergeOcrIntoForm(prev, { [key]: val }));
                               }}
-                              style={{ width: '100%', padding: '3px 5px', fontSize: 12, border: '1px solid #d1d5db', borderRadius: 4 }}
+                              className="w-full px-1.5 py-1 text-xs border border-slate-300 dark:border-slate-600 rounded bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200"
                             />
                           </div>
                         ) : null)}
                       </div>
-                      <button type="button" className="inline-flex items-center justify-center gap-2 min-h-[30px] bg-accent-500 text-white rounded-lg font-extrabold px-[14px] py-[5px] border-none cursor-pointer hover:bg-accent-700 hover:-translate-y-0.5 transition-all duration-150 disabled:opacity-65 disabled:cursor-not-allowed"
-                        style={{ marginTop: 10, fontSize: 12 }}
+                      <button type="button" className="inline-flex items-center justify-center gap-2 min-h-[32px] bg-[#10B981] hover:bg-[#059669] text-white rounded-lg text-xs font-bold px-3.5 py-1.5 border-none cursor-pointer transition-all duration-200 mt-2.5 shadow-sm hover:shadow-md"
                         onClick={() => confirmDocOcr(doc.key)}
                       >
-                        ✅ {t(lang, 'confirmOcrData')}
+                        <CheckCircle2 className="w-3.5 h-3.5" />
+                        {t(lang, 'confirmOcrData')}
                       </button>
                     </div>
                   )}
                   {slot.confirmed && (
-                    <div style={{ fontSize: 12, color: 'var(--gov-accent)', fontWeight: 600 }}>
-                      ✅ {lang === 'ar' ? 'تم دمج البيانات في النموذج' : 'Données fusionnées dans le formulaire'}
+                    <div className="text-xs text-emerald-600 dark:text-emerald-400 font-semibold flex items-center gap-1.5">
+                      <CheckCircle2 className="w-4 h-4" />
+                      {lang === 'ar' ? 'تم دمج البيانات في النموذج' : 'Données fusionnées dans le formulaire'}
                     </div>
                   )}
                 </div>
@@ -392,32 +394,29 @@ function CitizenOcrBox({ onApply, licenceDocuments = [], compact = false, lang }
         )}
 
         {nonOcrDocs.length > 0 && (
-          <div style={{ marginBottom: 20 }}>
+          <div className="mb-5">
             {nonOcrDocs.map(doc => {
               const slot = docSlot[doc.key] || {};
               const label = lang === 'ar' ? doc.label_ar : doc.label_fr;
               const isUploaded = slot.status === 'ready' || slot.status === 'done';
+              const borderColor = isUploaded ? 'border-emerald-500' : slot.status === 'error' ? 'border-red-400' : 'border-slate-200 dark:border-slate-600';
               return (
-                <div key={doc.key} style={{
-                      border: `2px solid ${isUploaded ? 'var(--gov-accent)' : slot.status === 'error' ? '#ef4444' : '#e5e7eb'}`,
-                  borderRadius: 10, padding: 14, marginBottom: 12,
-                  background: isUploaded ? '#f0fdf4' : '#ffffff'
-                }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                    <span style={{ fontSize: 20 }}>{docStatusIcon(slot.status)}</span>
-                    <div style={{ flex: 1 }}>
-                      <strong style={{ fontSize: 13, color: '#1e293b' }}>{label}</strong>
-                      <div style={{ fontSize: 11, color: '#6b7280' }}>
+                <div key={doc.key} className={`border-2 ${borderColor} rounded-xl p-4 mb-3 transition-colors ${isUploaded ? 'bg-emerald-50 dark:bg-emerald-900/20' : 'bg-white dark:bg-slate-800'}`}>
+                  <div className="flex items-center gap-3">
+                    <DocStatusIcon status={slot.status} />
+                    <div className="flex-1 min-w-0">
+                      <strong className="text-sm text-slate-800 dark:text-white">{label}</strong>
+                      <div className="text-xs text-slate-500 dark:text-slate-400">
                         {(!slot.status || slot.status === 'idle') && (lang === 'ar' ? 'في انتظار الرفع' : 'En attente d\'upload')}
                         {slot.status === 'compressing' && (lang === 'ar' ? 'جاري المعالجة...' : 'Traitement...')}
-                        {slot.status === 'ready' && (lang === 'ar' ? '✅ تم الرفع بنجاح' : '✅ Fichier chargé')}
-                        {slot.status === 'error' && `❌ ${slot.errorMsg || 'Erreur'}`}
+                        {slot.status === 'ready' && (lang === 'ar' ? 'تم الرفع بنجاح' : 'Fichier chargé')}
+                        {slot.status === 'error' && (slot.errorMsg || 'Erreur')}
                       </div>
                     </div>
-                    <label style={{ cursor: 'pointer', padding: '5px 12px', background: '#f1f5f9', border: '1px solid #cbd5e1', borderRadius: 6, fontSize: 12 }}>
+                    <label className="cursor-pointer px-3 py-1.5 bg-slate-100 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg text-xs font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors">
                       {isUploaded
-                        ? (lang === 'ar' ? '🔄 تغيير' : '🔄 Changer')
-                        : (lang === 'ar' ? '📤 رفع' : '📤 Importer')}
+                        ? (lang === 'ar' ? 'تغيير' : 'Changer')
+                        : (lang === 'ar' ? 'رفع' : 'Importer')}
                       <input
                         type="file" accept="image/*,.pdf" hidden
                         onChange={e => e.target.files[0] && handleDocFileChange(doc.key, e.target.files[0])}
@@ -426,12 +425,12 @@ function CitizenOcrBox({ onApply, licenceDocuments = [], compact = false, lang }
                   </div>
                   {slot.previewUrl && (
                     <img src={slot.previewUrl} alt={label}
-                      style={{ maxHeight: 120, borderRadius: 6, marginTop: 10, border: '1px solid #e5e7eb' }} />
+                      className="max-h-[120px] rounded-lg mt-3 border border-slate-200 dark:border-slate-600" />
                   )}
                   {isUploaded && !slot.previewUrl && slot.file && (
-                    <div style={{ marginTop: 8, fontSize: 12, color: '#374151', display: 'flex', alignItems: 'center', gap: 6 }}>
-                      <span>📄</span>
-                      <span>{slot.file.name}</span>
+                    <div className="mt-2 text-xs text-slate-600 dark:text-slate-400 flex items-center gap-1.5">
+                      <FileText className="w-3.5 h-3.5" />
+                      <span className="truncate">{slot.file.name}</span>
                     </div>
                   )}
                 </div>
@@ -443,12 +442,13 @@ function CitizenOcrBox({ onApply, licenceDocuments = [], compact = false, lang }
         {Object.keys(merged).some(k => merged[k]) && (
           <>
             {renderMergedFields()}
-            <div style={{ display: 'flex', gap: 8, marginTop: 14, flexWrap: 'wrap' }}>
-              <button type="button" className="inline-flex items-center justify-center gap-2 min-h-[40px] bg-accent-500 text-white rounded-lg font-extrabold px-4 py-[11px] border-none cursor-pointer hover:bg-accent-700 hover:-translate-y-0.5 transition-all duration-150 disabled:opacity-65 disabled:cursor-not-allowed" onClick={() => onApply(merged)}>
+            <div className="flex gap-2 mt-3.5 flex-wrap">
+              <button type="button" className="inline-flex items-center justify-center gap-2 min-h-[40px] bg-[#10B981] hover:bg-[#059669] text-white rounded-xl text-sm font-bold px-5 py-2.5 border-none cursor-pointer transition-all duration-200 shadow-md hover:shadow-lg" onClick={() => onApply(merged)}>
                 {t(lang, 'ocrConfirmUse')}
               </button>
-              <button type="button" className="inline-flex items-center justify-center gap-2 min-h-[40px] bg-accent-50 border border-accent-200 text-accent-500 rounded-lg font-extrabold px-4 py-[11px] cursor-pointer hover:bg-accent-700 hover:-translate-y-0.5 transition-all duration-150" onClick={reset}>
-                🗑 {lang === 'ar' ? 'إعادة تعيين' : 'Réinitialiser'}
+              <button type="button" className="inline-flex items-center justify-center gap-2 min-h-[40px] bg-slate-100 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 text-slate-600 dark:text-slate-300 rounded-xl text-sm font-bold px-5 py-2.5 cursor-pointer hover:bg-slate-200 dark:hover:bg-slate-600 transition-all duration-200" onClick={reset}>
+                <Trash2 className="w-4 h-4" />
+                {lang === 'ar' ? 'إعادة تعيين' : 'Réinitialiser'}
               </button>
             </div>
           </>
@@ -462,60 +462,65 @@ function CitizenOcrBox({ onApply, licenceDocuments = [], compact = false, lang }
       {(step === 'upload' || step === 'extracting') && (
         <>
           <div
-            className="flex flex-col items-center justify-center gap-2 border-2 border-dashed rounded-lg cursor-pointer text-center min-h-[140px] p-5"
-            style={{ borderColor: queue.length ? '#6366f1' : '#a8dbc3' }}
+            className="flex flex-col items-center justify-center gap-2 border-2 border-dashed rounded-xl cursor-pointer text-center min-h-[140px] p-5 transition-colors"
+            style={{ borderColor: queue.length ? '#10B981' : '#a8dbc3' }}
             onClick={() => inputRef.current?.click()}
             onDragEnter={e => { e.preventDefault(); e.stopPropagation(); }}
             onDragOver={e => { e.preventDefault(); e.stopPropagation(); }}
             onDrop={handleDrop}
           >
             <input ref={inputRef} type="file" accept="image/*" multiple hidden onChange={e => handleFiles(e.target.files)} />
-            <strong>{lang === 'ar' ? 'اسحب وثائقك هنا أو انقر (متعددة)' : 'Glissez vos documents ici ou cliquez (multiple)'}</strong>
-            <span style={{ fontSize: '12px', color: '#6b7280', marginTop: '4px' }}>
+            <Upload className="w-8 h-8 text-slate-400 dark:text-slate-500 mb-1" />
+            <strong className="text-sm text-slate-700 dark:text-slate-200">{lang === 'ar' ? 'اسحب وثائقك هنا أو انقر (متعددة)' : 'Glissez vos documents ici ou cliquez (multiple)'}</strong>
+            <span className="text-xs text-slate-400 dark:text-slate-500">
               {lang === 'ar' ? 'CIN، شهادة، إذن...' : 'CIN, Diplôme, Permis...'}
             </span>
           </div>
 
           {queue.length > 0 && (
-            <div style={{ marginTop: '12px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                <span style={{ fontSize: '13px', fontWeight: 600 }}>
+            <div className="mt-3">
+              <div className="flex justify-between items-center mb-2">
+                <span className="text-sm font-semibold text-slate-700 dark:text-slate-300">
                   {lang === 'ar' ? `${queue.length} وثيقة` : `${queue.length} document(s)`}
                 </span>
-                <button className="inline-flex items-center justify-center gap-2 min-h-[30px] bg-accent-50 border border-accent-200 text-accent-500 rounded-lg font-extrabold px-[10px] py-[3px] cursor-pointer hover:bg-accent-700 hover:-translate-y-0.5 transition-all duration-150" style={{ fontSize: '12px' }} onClick={reset}>
+                <button className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 text-slate-500 dark:text-slate-400 rounded-lg text-xs font-semibold cursor-pointer hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors" onClick={reset}>
+                  <Trash2 className="w-3.5 h-3.5" />
                   {lang === 'ar' ? 'مسح الكل' : 'Tout effacer'}
                 </button>
               </div>
               {queue.map((doc, idx) => (
-                <div key={doc.id} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '8px', background: '#f9fafb', borderRadius: '8px', marginBottom: '6px', border: '1px solid #e5e7eb' }}>
+                <div key={doc.id} className="flex items-center gap-3 p-2 bg-slate-50 dark:bg-slate-800 rounded-xl mb-1.5 border border-slate-200 dark:border-slate-700">
                   {doc.previewUrl
-                    ? <img src={doc.previewUrl} alt="" style={{ width: 40, height: 40, objectFit: 'cover', borderRadius: 6 }} />
-                    : <div style={{ width: 40, height: 40, background: '#e5e7eb', borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>📄</div>
+                    ? <img src={doc.previewUrl} alt="" className="w-10 h-10 object-cover rounded-lg" />
+                    : <div className="w-10 h-10 bg-slate-200 dark:bg-slate-700 rounded-lg flex items-center justify-center"><FileText className="w-5 h-5 text-slate-400" /></div>
                   }
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: '12px', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-xs font-semibold text-slate-700 dark:text-slate-300 truncate">
                       Doc {idx + 1} — {doc.name}
                     </div>
-                    <div style={{ fontSize: '11px', color: doc.status === 'error' ? '#ef4444' : doc.status === 'extracted' ? 'var(--gov-accent)' : '#6b7280' }}>
+                    <div className={`text-[11px] font-medium ${doc.status === 'error' ? 'text-red-500' : doc.status === 'extracted' ? 'text-emerald-600' : 'text-slate-400'}`}>
                       {statusLabel(doc)}
                     </div>
                   </div>
-                  <button onClick={() => removeDoc(doc.id)} disabled={doc.status === 'extracting'} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#9ca3af', fontSize: '16px' }}>✕</button>
+                  <button onClick={() => removeDoc(doc.id)} disabled={doc.status === 'extracting'} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 disabled:opacity-40 transition-colors">
+                    <XCircle className="w-4 h-4" />
+                  </button>
                 </div>
               ))}
-              {errorMsg && <div className="bg-[#fff1f2] border border-[#fecdd3] text-[#9f1239] rounded-lg p-[10px_12px] text-sm font-bold" style={{ marginTop: '8px' }}>{errorMsg}</div>}
-              <div style={{ display: 'flex', gap: '8px', marginTop: '10px', flexWrap: 'wrap' }}>
+              {errorMsg && <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 rounded-xl p-3 text-sm font-semibold mt-2">{errorMsg}</div>}
+              <div className="flex gap-2 mt-2.5 flex-wrap">
                 <button
-                  className="inline-flex items-center justify-center gap-2 min-h-[40px] bg-accent-500 text-white rounded-lg font-extrabold px-4 py-[11px] border-none cursor-pointer hover:bg-accent-700 hover:-translate-y-0.5 transition-all duration-150 disabled:opacity-65 disabled:cursor-not-allowed"
+                  className="inline-flex items-center justify-center gap-2 min-h-[40px] bg-[#10B981] hover:bg-[#059669] text-white rounded-xl text-sm font-bold px-5 py-2.5 border-none cursor-pointer transition-all duration-200 shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
                   type="button"
                   onClick={extractAll}
                   disabled={step === 'extracting' || queue.every(d => d.status !== 'pending')}
                 >
+                  <Search className="w-4 h-4" />
                   {step === 'extracting'
-                    ? (lang === 'ar' ? '📖 جاري القراءة...' : '📖 Lecture en cours...')
+                    ? (lang === 'ar' ? 'جاري القراءة...' : 'Lecture en cours...')
                     : (lang === 'ar'
-                        ? `📖 قراءة النص من ${queue.filter(d => d.status === 'pending').length} صورة`
-                        : `📖 Extraire le texte de ${queue.filter(d => d.status === 'pending').length} image(s)`)
+                        ? `قراءة النص من ${queue.filter(d => d.status === 'pending').length} صورة`
+                        : `Extraire le texte de ${queue.filter(d => d.status === 'pending').length} image(s)`)
                   }
                 </button>
               </div>
@@ -526,64 +531,67 @@ function CitizenOcrBox({ onApply, licenceDocuments = [], compact = false, lang }
 
       {step === 'extracted' && (
         <div>
-          <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginBottom: '10px' }}>
+          <div className="flex gap-1.5 flex-wrap mb-3">
             {queue.map((doc, idx) => (
               <button
                 key={doc.id}
                 type="button"
                 onClick={() => setActiveIdx(idx)}
-                style={{
-                  padding: '4px 10px', fontSize: '12px', borderRadius: '20px', border: '1px solid',
-                  cursor: 'pointer',
-                  background: activeIdx === idx ? '#6366f1' : '#f3f4f6',
-                  color: activeIdx === idx ? '#fff' : '#374151',
-                  borderColor: activeIdx === idx ? '#6366f1' : '#d1d5db',
-                }}
+                className={`px-3 py-1.5 text-xs rounded-full border font-medium transition-all ${
+                  activeIdx === idx
+                    ? 'bg-[#10B981] border-[#10B981] text-white'
+                    : 'bg-slate-100 dark:bg-slate-700 border-slate-200 dark:border-slate-600 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-600'
+                }`}
               >
-                {doc.status === 'extracted' ? '📄' : '❌'} Doc {idx + 1}
+                {doc.status === 'extracted' ? <FileText className="w-3 h-3 inline mr-1" /> : <XCircle className="w-3 h-3 inline mr-1" />}
+                Doc {idx + 1}
               </button>
             ))}
           </div>
           {queue[activeIdx] && (
-            <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '10px', marginBottom: '10px' }}>
-              <div style={{ fontSize: '11px', color: '#64748b', marginBottom: '6px', fontWeight: 600 }}>{queue[activeIdx].name}</div>
+            <div className="bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-3 mb-3">
+              <div className="text-xs text-slate-500 dark:text-slate-400 mb-1.5 font-semibold">{queue[activeIdx].name}</div>
               {queue[activeIdx].status === 'extracted' ? (
-                <pre style={{ margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontSize: '12px', lineHeight: '1.6', color: '#1e293b', maxHeight: '180px', overflowY: 'auto', direction: /[\u0600-\u06FF]/.test(queue[activeIdx].extractedText) ? 'rtl' : 'ltr' }}>
+                <pre className="m-0 whitespace-pre-wrap break-words text-xs leading-relaxed text-slate-800 dark:text-slate-200 max-h-[180px] overflow-y-auto" dir={/[\u0600-\u06FF]/.test(queue[activeIdx].extractedText) ? 'rtl' : 'ltr'}>
                   {queue[activeIdx].extractedText || '(aucun texte)'}
                 </pre>
               ) : (
-                <p style={{ color: '#ef4444', fontSize: '12px', margin: 0 }}>❌ Échec lecture de ce document</p>
+                <p className="text-red-500 text-xs m-0">Échec lecture de ce document</p>
               )}
             </div>
           )}
-          {errorMsg && <div className="bg-[#fff1f2] border border-[#fecdd3] text-[#9f1239] rounded-lg p-[10px_12px] text-sm font-bold" style={{ marginBottom: '8px' }}>{errorMsg}</div>}
-          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-            <button className="inline-flex items-center justify-center gap-2 min-h-[40px] bg-accent-500 text-white rounded-lg font-extrabold px-4 py-[11px] border-none cursor-pointer hover:bg-accent-700 hover:-translate-y-0.5 transition-all duration-150 disabled:opacity-65 disabled:cursor-not-allowed" type="button" onClick={analyze}
+          {errorMsg && <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 rounded-xl p-3 text-sm font-semibold mb-2">{errorMsg}</div>}
+          <div className="flex gap-2 flex-wrap">
+            <button className="inline-flex items-center justify-center gap-2 min-h-[40px] bg-[#10B981] hover:bg-[#059669] text-white rounded-xl text-sm font-bold px-5 py-2.5 border-none cursor-pointer transition-all duration-200 shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed" type="button" onClick={analyze}
               disabled={queue.every(d => d.status !== 'extracted')}>
-              🤖 {lang === 'ar' ? 'تحليل بالذكاء الاصطناعي وملء النموذج' : "Analyser avec l'IA et remplir le formulaire"}
+              <Bot className="w-4 h-4" />
+              {lang === 'ar' ? 'تحليل بالذكاء الاصطناعي وملء النموذج' : "Analyser avec l'IA et remplir le formulaire"}
             </button>
-            <button className="inline-flex items-center justify-center gap-2 min-h-[40px] bg-accent-50 border border-accent-200 text-accent-500 rounded-lg font-extrabold px-4 py-[11px] cursor-pointer hover:bg-accent-700 hover:-translate-y-0.5 transition-all duration-150" type="button" onClick={reset}>
-              🗑 {lang === 'ar' ? 'إعادة تعيين' : 'Réinitialiser'}
+            <button className="inline-flex items-center justify-center gap-2 min-h-[40px] bg-slate-100 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 text-slate-600 dark:text-slate-300 rounded-xl text-sm font-bold px-5 py-2.5 cursor-pointer hover:bg-slate-200 dark:hover:bg-slate-600 transition-all duration-200" type="button" onClick={reset}>
+              <Trash2 className="w-4 h-4" />
+              {lang === 'ar' ? 'إعادة تعيين' : 'Réinitialiser'}
             </button>
           </div>
         </div>
       )}
 
       {step === 'analyzing' && (
-        <div className="bg-[#eef8f2] border border-[#bfe5cf] rounded-lg text-[#0f5132] mt-3 p-[10px_12px]" style={{ textAlign: 'center', padding: '20px' }}>
-          🤖 {lang === 'ar' ? 'الذكاء الاصطناعي يحلل الوثائق ويملأ النموذج...' : "L'IA analyse les documents et remplit le formulaire..."}
+        <div className="bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-700 rounded-xl text-emerald-700 dark:text-emerald-300 text-center py-5">
+          <Bot className="w-6 h-6 mx-auto mb-2 animate-pulse" />
+          {lang === 'ar' ? 'الذكاء الاصطناعي يحلل الوثائق ويملأ النموذج...' : "L'IA analyse les documents et remplit le formulaire..."}
         </div>
       )}
 
       {step === 'done' && (
         <div>
           {renderMergedFields()}
-          <div style={{ display: 'flex', gap: '8px', marginTop: '12px', flexWrap: 'wrap' }}>
-            <button className="inline-flex items-center justify-center gap-2 min-h-[40px] bg-accent-500 text-white rounded-lg font-extrabold px-4 py-[11px] border-none cursor-pointer hover:bg-accent-700 hover:-translate-y-0.5 transition-all duration-150 disabled:opacity-65 disabled:cursor-not-allowed" type="button" onClick={() => onApply(merged)}>
+          <div className="flex gap-2 mt-3 flex-wrap">
+            <button className="inline-flex items-center justify-center gap-2 min-h-[40px] bg-[#10B981] hover:bg-[#059669] text-white rounded-xl text-sm font-bold px-5 py-2.5 border-none cursor-pointer transition-all duration-200 shadow-md hover:shadow-lg" type="button" onClick={() => onApply(merged)}>
               {t(lang, 'ocrConfirmUse')}
             </button>
-            <button className="inline-flex items-center justify-center gap-2 min-h-[40px] bg-accent-50 border border-accent-200 text-accent-500 rounded-lg font-extrabold px-4 py-[11px] cursor-pointer hover:bg-accent-700 hover:-translate-y-0.5 transition-all duration-150" type="button" onClick={reset}>
-              🗑 {lang === 'ar' ? 'إعادة تعيين' : 'Réinitialiser'}
+            <button className="inline-flex items-center justify-center gap-2 min-h-[40px] bg-slate-100 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 text-slate-600 dark:text-slate-300 rounded-xl text-sm font-bold px-5 py-2.5 cursor-pointer hover:bg-slate-200 dark:hover:bg-slate-600 transition-all duration-200" type="button" onClick={reset}>
+              <Trash2 className="w-4 h-4" />
+              {lang === 'ar' ? 'إعادة تعيين' : 'Réinitialiser'}
             </button>
           </div>
         </div>

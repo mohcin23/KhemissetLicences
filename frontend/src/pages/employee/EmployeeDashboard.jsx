@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 
 const DECISION_PDF_STATUSES = new Set([
+  'en_cours_analyse',
   'avis_favorable',
   'decision_imprimee',
 ]);
