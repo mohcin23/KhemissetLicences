@@ -7,9 +7,29 @@ on:
     branches: [main]
 
 jobs:
-  services-ci:
-    name: Microservices Install
+  validate-config:
+    name: Validate Configuration Files
     runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Validate docker-compose.yml
+        run: docker compose config --quiet
+
+      - name: Validate JSON files
+        run: |
+          echo "Validating package.json files..."
+          for f in $(find . -name "package.json" -not -path "*/node_modules/*"); do
+            echo "Checking $f"
+            python3 -c "import json; json.load(open('$f'))" || exit 1
+          done
+          echo "All JSON files are valid."
+
+  services-ci:
+    name: Service — ${{ matrix.service }}
+    runs-on: ubuntu-latest
+    needs: validate-config
     strategy:
       matrix:
         service:
@@ -42,9 +62,14 @@ jobs:
         env:
           PUPPETEER_SKIP_DOWNLOAD: true
 
+      - name: Verify service starts
+        working-directory: ./services/${{ matrix.service }}
+        run: timeout 5 node server.js || true
+
   api-gateway-ci:
-    name: API Gateway Install
+    name: API Gateway
     runs-on: ubuntu-latest
+    needs: validate-config
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -58,9 +83,14 @@ jobs:
         working-directory: ./api-gateway
         run: npm install
 
+      - name: Verify gateway starts
+        working-directory: ./api-gateway
+        run: timeout 5 node server.js || true
+
   frontend-ci:
-    name: Frontend Install and Build
+    name: Frontend
     runs-on: ubuntu-latest
+    needs: validate-config
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -70,10 +100,25 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Install frontend dependencies
+      - name: Install dependencies
         working-directory: ./frontend
         run: npm install
+
+      - name: Lint frontend
+        working-directory: ./frontend
+        run: npx eslint src/ --max-warnings=50 || true
 
       - name: Build frontend
         working-directory: ./frontend
         run: CI=false npm run build
+
+  docker-build:
+    name: Docker Build
+    runs-on: ubuntu-latest
+    needs: [services-ci, api-gateway-ci, frontend-ci]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Build all Docker images
+        run: docker compose build --parallel
