@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const API = axios.create({ baseURL: 'http://localhost:3001/api' });
+const API = axios.create({ baseURL: `${window.location.protocol}//${window.location.hostname}:3001/api` });
 let pendingRequests = 0;
 const notifyPending = () => {
   window.dispatchEvent(new CustomEvent('api-pending-changed', { detail: { pending: pendingRequests } }));

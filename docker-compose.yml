@@ -42,7 +42,7 @@ services:
     environment:
       PORT: 3001
       NODE_ENV: production
-      CORS_ORIGINS: http://localhost,http://localhost:3000
+      CORS_ORIGINS: http://localhost,http://localhost:3000,http://31.220.90.152,http://31.220.90.152:80
       AUTH_SERVICE_URL: http://auth-service:5001
       USER_SERVICE_URL: http://user-service:5002
       DEMANDES_SERVICE_URL: http://demandes-service:5003
