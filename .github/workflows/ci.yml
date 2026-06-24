@@ -61,6 +61,8 @@ jobs:
       - name: Install service dependencies
         working-directory: ./services/${{ matrix.service }}
         run: npm install
+        env:
+          PUPPETEER_SKIP_DOWNLOAD: 'true'
 
   api-gateway-lint:
     name: Lint — api-gateway
@@ -124,9 +126,6 @@ jobs:
     needs: docker-build
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     timeout-minutes: 15
-    environment:
-      name: production
-      url: http://31.220.90.152
     steps:
       - name: Deploy via SSH
         uses: appleboy/ssh-action@v1
