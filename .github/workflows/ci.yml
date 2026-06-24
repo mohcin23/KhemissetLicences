@@ -14,6 +14,7 @@ jobs:
   validate:
     name: Validate Config
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
 
@@ -32,6 +33,7 @@ jobs:
     name: Lint — ${{ matrix.service }}
     runs-on: ubuntu-latest
     needs: validate
+    timeout-minutes: 10
     strategy:
       matrix:
         service:
@@ -42,28 +44,6 @@ jobs:
           - audit-service
           - workflow-service
           - licences-service
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION_BACKEND }}
-
-      - name: Install shared dependencies
-        working-directory: ./shared
-        run: npm install
-
-      - name: Install service dependencies
-        working-directory: ./services/${{ matrix.service }}
-        run: npm install
-
-  services-special:
-    name: Lint — ${{ matrix.service }}
-    runs-on: ubuntu-latest
-    needs: validate
-    strategy:
-      matrix:
-        service:
           - pdf-service
           - ocr-service
           - ai-service
@@ -86,6 +66,7 @@ jobs:
     name: Lint — api-gateway
     runs-on: ubuntu-latest
     needs: validate
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
 
@@ -101,6 +82,7 @@ jobs:
     name: Lint & Build — frontend
     runs-on: ubuntu-latest
     needs: validate
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
 
@@ -123,7 +105,8 @@ jobs:
   docker-build:
     name: Docker Build
     runs-on: ubuntu-latest
-    needs: [services-lint, services-special, api-gateway-lint, frontend-lint]
+    needs: [services-lint, api-gateway-lint, frontend-lint]
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
 
@@ -140,6 +123,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: docker-build
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    timeout-minutes: 15
     environment:
       name: production
       url: http://31.220.90.152
