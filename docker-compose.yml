@@ -255,6 +255,7 @@ services:
       DB_PORT: 5432
       REDIS_URL: redis://:redispassword@redis:6379
       JWT_SECRET: super_secret_jwt_key_32_chars_min
+      CORS_ORIGINS: http://localhost,http://localhost:3000,http://31.220.90.152
     depends_on:
       - db
       - redis
