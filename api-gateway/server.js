@@ -39,10 +39,6 @@ const globalLimiter = rateLimit({
 });
 app.use(globalLimiter);
 
-// Body parsing (before proxy routes so body is available for forwarding)
-app.use(express.json({ limit: '25mb' }));
-app.use(express.urlencoded({ extended: true, limit: '25mb' }));
-
 // ─── Service Routes ─────────────────────────────────────────────────────────
 
 // Auth Service
@@ -141,6 +137,10 @@ app.use('/api/licences', createProxyMiddleware({
   changeOrigin: true,
   pathRewrite: { '^/api/licences': '/licences' }
 }));
+
+// Body parsing (after proxy routes - proxy forwards raw body stream)
+app.use(express.json({ limit: '25mb' }));
+app.use(express.urlencoded({ extended: true, limit: '25mb' }));
 
 // ─── Health Check ───────────────────────────────────────────────────────────
 
