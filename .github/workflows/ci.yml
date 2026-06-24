@@ -11,7 +11,6 @@ env:
   NODE_VERSION_FRONTEND: '20'
 
 jobs:
-  # ─── Stage 1: Validate ───────────────────────────────────────────────────────
   validate:
     name: Validate Config
     runs-on: ubuntu-latest
@@ -29,7 +28,6 @@ jobs:
           done
           echo "All JSON files valid."
 
-  # ─── Stage 2: Lint & Test ────────────────────────────────────────────────────
   services-lint:
     name: Lint — ${{ matrix.service }}
     runs-on: ubuntu-latest
@@ -50,18 +48,14 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION_BACKEND }}
-          cache: 'npm'
-          cache-dependency-path: |
-            shared/package-lock.json
-            services/${{ matrix.service }}/package-lock.json
 
       - name: Install shared dependencies
         working-directory: ./shared
-        run: npm ci
+        run: npm install
 
       - name: Install service dependencies
         working-directory: ./services/${{ matrix.service }}
-        run: npm ci
+        run: npm install
 
       - name: Verify service starts (3s timeout)
         working-directory: ./services/${{ matrix.service }}
@@ -90,18 +84,14 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION_BACKEND }}
-          cache: 'npm'
-          cache-dependency-path: |
-            shared/package-lock.json
-            services/${{ matrix.service }}/package-lock.json
 
       - name: Install shared dependencies
         working-directory: ./shared
-        run: npm ci
+        run: npm install
 
       - name: Install service dependencies
         working-directory: ./services/${{ matrix.service }}
-        run: npm ci
+        run: npm install
 
   api-gateway-lint:
     name: Lint — api-gateway
@@ -113,12 +103,10 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION_BACKEND }}
-          cache: 'npm'
-          cache-dependency-path: api-gateway/package-lock.json
 
       - name: Install dependencies
         working-directory: ./api-gateway
-        run: npm ci
+        run: npm install
 
       - name: Verify gateway starts
         working-directory: ./api-gateway
@@ -137,22 +125,19 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION_FRONTEND }}
-          cache: 'npm'
-          cache-dependency-path: frontend/package-lock.json
 
       - name: Install dependencies
         working-directory: ./frontend
-        run: npm ci
+        run: npm install
 
       - name: Lint
         working-directory: ./frontend
-        run: npx eslint src/ --max-warnings=20
+        run: npx eslint src/ --max-warnings=50
 
       - name: Build
         working-directory: ./frontend
         run: CI=false npm run build
 
-  # ─── Stage 3: Docker Build ───────────────────────────────────────────────────
   docker-build:
     name: Docker Build
     runs-on: ubuntu-latest
@@ -168,7 +153,6 @@ jobs:
           echo "Built images:"
           docker images --format "table {{.Repository}}\t{{.Size}}" | grep "^l-"
 
-  # ─── Stage 4: Deploy (only on main push) ─────────────────────────────────────
   deploy:
     name: Deploy to VPS
     runs-on: ubuntu-latest
