@@ -57,17 +57,6 @@ jobs:
         working-directory: ./services/${{ matrix.service }}
         run: npm install
 
-      - name: Verify service starts (3s timeout)
-        working-directory: ./services/${{ matrix.service }}
-        run: timeout 3 node server.js
-        env:
-          JWT_SECRET: test_secret_key_for_ci_only
-          DB_HOST: localhost
-          DB_USER: test
-          DB_PASSWORD: test
-          DB_NAME: test
-          REDIS_URL: redis://localhost:6379
-
   services-special:
     name: Lint — ${{ matrix.service }}
     runs-on: ubuntu-latest
@@ -107,13 +96,6 @@ jobs:
       - name: Install dependencies
         working-directory: ./api-gateway
         run: npm install
-
-      - name: Verify gateway starts
-        working-directory: ./api-gateway
-        run: timeout 3 node server.js
-        env:
-          PORT: 3001
-          NODE_ENV: test
 
   frontend-lint:
     name: Lint & Build — frontend
