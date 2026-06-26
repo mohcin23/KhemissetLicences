@@ -47,11 +47,11 @@ export const authAPI = {
 
 export const adminAPI = {
   getUsers: (params) => API.get('/admin/users', { params }),
-  approveUser: (id) => API.patch(`/admin/users/${id}/approve`),
-  rejectUser: (id) => API.patch(`/admin/users/${id}/reject`),
-  toggleActive: (id) => API.patch(`/admin/users/${id}/toggle-active`),
+  approveUser: (id) => API.post(`/admin/users/${id}/approve`),
+  rejectUser: (id) => API.post(`/admin/users/${id}/reject`),
+  toggleActive: (id) => API.post(`/admin/users/${id}/toggle-active`),
   deleteUser: (id) => API.delete(`/admin/users/${id}`),
-  changeRole: (id, role) => API.patch(`/admin/users/${id}/role`, { role }),
+  changeRole: (id, role) => API.post(`/admin/users/${id}/change-role`, { role }),
   createEmployee: (data) => API.post('/admin/create-employee', data), // PHASE 4 FINAL
   getUserActivity: (id) => API.get(`/admin/users/${id}/activity`), // PHASE 4 FINAL
   getStatsOverview: () => API.get('/admin/stats/overview'),
