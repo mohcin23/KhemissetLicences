@@ -65,7 +65,7 @@ router.get('/stats/by-commune', async (req, res) => {
         SUM(CASE WHEN statut = 'accepte' THEN 1 ELSE 0 END) AS approuvees,
         SUM(CASE WHEN statut = 'refuse' THEN 1 ELSE 0 END) AS rejetees,
         SUM(CASE WHEN statut NOT IN ('accepte','refuse','archive') THEN 1 ELSE 0 END) AS en_cours,
-        CASE WHEN COUNT(*) > 0 THEN ROUND(SUM(CASE WHEN statut = 'accepte' THEN 1 ELSE 0 END) * 100.0 / COUNT(*)) || '%' ELSE '0%' END AS taux_approbation
+        CASE WHEN COUNT(*) > 0 THEN ROUND(SUM(CASE WHEN statut = 'accepte' THEN 1 ELSE 0 END) * 100.0 / COUNT(*))::int::text || '%' ELSE '0%' END AS taux_approbation
       FROM demandes
       GROUP BY commune
       ORDER BY total DESC

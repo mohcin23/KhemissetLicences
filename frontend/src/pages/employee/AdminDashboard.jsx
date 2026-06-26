@@ -86,13 +86,13 @@ export default function AdminDashboard() {
     try {
       const now = new Date();
       const from = new Date(now.getFullYear(), now.getMonth() - 11, 1).toISOString().slice(0, 10);
-      const [overviewRes, byCommuneRes, byAgentRes, timelineRes] = await Promise.all([
+      const [overviewRes, byCommuneRes, byAgentRes, timelineRes] = await Promise.allSettled([
         adminAPI.getStatsOverview(),
         adminAPI.getStatsByCommune(),
         adminAPI.getStatsByAgent(),
         adminAPI.getStatsTimeline({ from, group_by: 'month' })
       ]);
-      const overview = overviewRes.data.data || {};
+      const overview = overviewRes.status === 'fulfilled' ? (overviewRes.value.data.data || {}) : {};
       setStats({
         ...overview,
         total: overview.total_demandes || 0,
@@ -100,10 +100,10 @@ export default function AdminDashboard() {
         rejetes: overview.rejetees || 0,
         en_attente: overview.en_attente || 0,
         fichiers_rejetes: overview.fichiers_rejetes || 0,
-        by_commune: byCommuneRes.data.data || [],
-        by_agent: byAgentRes.data.data || [],
+        by_commune: byCommuneRes.status === 'fulfilled' ? (byCommuneRes.value.data.data || []) : [],
+        by_agent: byAgentRes.status === 'fulfilled' ? (byAgentRes.value.data.data || []) : [],
       });
-      const rows = timelineRes.data.data || [];
+      const rows = timelineRes.status === 'fulfilled' ? (timelineRes.value.data.data || []) : [];
       setMonthlyStats(rows.map(row => ({
         ...row,
         label: row.date?.length === 7
