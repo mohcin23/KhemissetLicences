@@ -27,10 +27,14 @@ router.get('/stats/overview', async (req, res) => {
     const [[{ en_attente }]] = await db.execute("SELECT COUNT(*) AS \"en_attente\" FROM demandes WHERE statut NOT IN ('accepte','refuse','archive')");
     const [[{ approuvees }]] = await db.execute("SELECT COUNT(*) AS \"approuvees\" FROM demandes WHERE statut = 'accepte'");
     const [[{ rejetees }]] = await db.execute("SELECT COUNT(*) AS \"rejetees\" FROM demandes WHERE statut = 'refuse'");
-    const [[{ fichiers_rejetes }]] = await db.execute("SELECT COUNT(*) AS \"fichiers_rejetes\" FROM demandes WHERE statut = 'fichier_rejete'").catch(() => [{ fichiers_rejetes: 0 }]);
-    const [[{ demandes_ce_semaine }]] = await db.execute("SELECT COUNT(*) AS \"demandes_ce_semaine\" FROM demandes WHERE created_at >= CURRENT_DATE - INTERVAL '7 days'").catch(() => [{ demandes_ce_semaine: 0 }]);
 
-    const [[{ total_agents }]] = await db.execute('SELECT COUNT(*) AS "total_agents" FROM users WHERE role IN (\'admin\',\'agent\') AND is_active <> -1');
+    let fichiers_rejetes = 0;
+    try { const [[r]] = await db.execute("SELECT COUNT(*) AS v FROM demandes WHERE statut = 'fichier_rejete'"); fichiers_rejetes = r?.v ?? 0; } catch {}
+
+    let demandes_ce_semaine = 0;
+    try { const [[r]] = await db.execute("SELECT COUNT(*) AS v FROM demandes WHERE created_at >= CURRENT_DATE - INTERVAL '7 days'"); demandes_ce_semaine = r?.v ?? 0; } catch {}
+
+    const [[{ total_agents }]] = await db.execute('SELECT COUNT(*) AS "total_agents" FROM users WHERE role IN ($1,$2) AND is_active <> -1', ['admin', 'agent']);
     const taux = total_demandes > 0 ? Math.round((approuvees / total_demandes) * 100) + '%' : '0%';
 
     const [roleStats] = await db.execute("SELECT role, COUNT(*) AS count FROM users WHERE is_active <> -1 GROUP BY role");
