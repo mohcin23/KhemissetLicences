@@ -140,7 +140,7 @@ services:
       REDIS_URL: redis://:redispassword@redis:6379
       JWT_SECRET: super_secret_jwt_key_32_chars_min
     volumes:
-      - uploads_data:/app/uploads
+      - uploads_data:/app/services/demandes-service/uploads
     depends_on:
       - db
       - redis

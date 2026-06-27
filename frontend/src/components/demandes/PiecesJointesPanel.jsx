@@ -36,7 +36,7 @@ function AuthThumbnail({ demandeId, pj }) {
   const blobUrlRef = useRef(null);
   useEffect(() => {
     let cancelled = false;
-    const url = demandesAPI.downloadPieceJointeUrl(demandeId, pj.id);
+    const url = getDownloadUrl(demandeId, pj.id);
     fetchBlob(url).then((blob) => {
       if (!cancelled) {
         const url = URL.createObjectURL(blob);
@@ -70,7 +70,9 @@ export default function PiecesJointesPanel({
   canDelete = false,
   isRtl = false,
   onPrintAll,
+  downloadUrlBuilder,
 }) {
+  const getDownloadUrl = downloadUrlBuilder || demandesAPI.downloadPieceJointeUrl;
   const inputRef = useRef(null);
   const [viewMode, setViewMode] = useState('grid');
 
@@ -89,7 +91,7 @@ export default function PiecesJointesPanel({
   const handleInputChange = (e) => handleFiles(e.target.files);
 
   const handleDownload = (pj) => {
-    const url = demandesAPI.downloadPieceJointeUrl(demandeId, pj.id);
+    const url = getDownloadUrl(demandeId, pj.id);
     const token = localStorage.getItem('auth_token');
     fetch(url, { headers: { Authorization: `Bearer ${token}` } })
       .then((r) => r.blob())
@@ -104,7 +106,7 @@ export default function PiecesJointesPanel({
   };
 
   const handleView = async (pj) => {
-    const url = demandesAPI.downloadPieceJointeUrl(demandeId, pj.id);
+    const url = getDownloadUrl(demandeId, pj.id);
     try {
       const blob = await fetchBlob(url);
       openBlobInTab(blob);

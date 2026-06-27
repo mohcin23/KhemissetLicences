@@ -1205,6 +1205,7 @@ export default function CitizenPortal({ lang: initialLang, setLang: setGlobalLan
               demandeId={selectedDemande.id}
               pieces={pjUploaded}
               loading={pjPanelLoading}
+              downloadUrlBuilder={citizenAPI.downloadPieceJointeUrl}
               onUpload={async (files) => {
                 setPjPanelLoading(true);
                 try {
