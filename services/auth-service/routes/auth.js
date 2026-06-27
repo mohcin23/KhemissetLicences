@@ -5,11 +5,12 @@ const authCtrl = require('../controllers/authController');
 const authMiddleware = require('../middleware/authMiddleware');
 
 const loginLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 10,
+  windowMs: 5 * 60 * 1000,
+  max: 20,
+  keyGenerator: (req) => req.ip || req.headers['x-forwarded-for'] || 'unknown',
   standardHeaders: true,
   legacyHeaders: false,
-  message: { success: false, message: 'Trop de tentatives de connexion. Réessayez dans 15 minutes.' }
+  message: { success: false, message: 'Trop de tentatives de connexion. Réessayez dans 5 minutes.' }
 });
 
 const registerLimiter = rateLimit({
