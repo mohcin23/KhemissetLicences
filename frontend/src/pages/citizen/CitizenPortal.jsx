@@ -466,18 +466,16 @@ export default function CitizenPortal({ lang: initialLang, setLang: setGlobalLan
 
   const uploadFiles = async (demandeId, files) => {
     if (!files || files.length === 0) return;
-    const fichiers = await Promise.all(
-      files.map(async (item) => {
-        const file = item?.file || item;
-        return {
-          nom: file.name,
-          type_mime: file.type,
-          base64: await fileToBase64(file),
-          type_piece: item?.key || item?.docKey || null,
-        };
-      })
-    );
-    await citizenAPI.uploadPiecesJointes(demandeId, fichiers);
+    for (const item of files) {
+      const file = item?.file || item;
+      const fichier = {
+        nom: file.name,
+        type_mime: file.type,
+        base64: await fileToBase64(file),
+        type_piece: item?.key || item?.docKey || null,
+      };
+      await citizenAPI.uploadPiecesJointes(demandeId, [fichier]);
+    }
   };
 
   const submitDemande = async (e) => {
