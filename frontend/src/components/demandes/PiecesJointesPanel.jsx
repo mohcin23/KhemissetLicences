@@ -36,7 +36,7 @@ function AuthThumbnail({ demandeId, pj }) {
   const blobUrlRef = useRef(null);
   useEffect(() => {
     let cancelled = false;
-    const url = getDownloadUrl(demandeId, pj.id);
+    const url = demandesAPI.downloadPieceJointeUrl(demandeId, pj.id);
     fetchBlob(url).then((blob) => {
       if (!cancelled) {
         const url = URL.createObjectURL(blob);

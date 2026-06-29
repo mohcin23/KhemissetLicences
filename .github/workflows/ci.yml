@@ -8,7 +8,7 @@ on:
 
 env:
   NODE_VERSION_BACKEND: '18'
-  NODE_VERSION_FRONTEND: '20'
+  NODE_VERSION_FRONTEND: '22'
 
 jobs:
   validate:
