@@ -331,7 +331,7 @@ function DocCard({ doc, docFile, isReading, isDone, isError, lang, onFileChange,
 
 /* ── Main Component ───────────────────────────────────────────────────────── */
 export default function DynamicLicenceForm({
-  licenceType, lang, initialData = {}, onSubmit, onBack,
+  licenceType, lang, initialData = {}, onSubmit, onBack, loading = false,
   mode = 'manual', onModeChange, ocrPanel = null, licenceDocuments = [],
 }) {
   const config = FORM_CONFIG[licenceType];
@@ -822,8 +822,10 @@ export default function DynamicLicenceForm({
                     <ArrowLeft size={16} style={lang === 'ar' ? { transform: 'scaleX(-1)' } : undefined} />
                     {txt('Retour', 'السابق')}
                   </button>
-                  <button type="button" className="citizen-btn-next" onClick={handleSubmit}>
-                    {txt('Confirmer et envoyer', 'تأكيد الإرسال')}
+                  <button type="button" className="citizen-btn-next" onClick={handleSubmit} disabled={loading}>
+                    {loading
+                      ? txt('Envoi en cours...', 'جارٍ الإرسال...')
+                      : txt('Confirmer et envoyer', 'تأكيد الإرسال')}
                     <Send size={16} />
                   </button>
                 </div>

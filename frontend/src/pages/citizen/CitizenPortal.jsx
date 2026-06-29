@@ -1050,6 +1050,7 @@ export default function CitizenPortal({ lang: initialLang, setLang: setGlobalLan
                 initialData={form}
                 onBack={() => setLicenceType(null)}
                 onSubmit={submitLicenceRequest}
+                loading={loading}
                 mode={mode}
                 onModeChange={(nextMode) => { setMode(nextMode); setUploadedDocs([]); }}
                 licenceDocuments={getLicenceDocs(licenceType)}
